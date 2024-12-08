@@ -70,6 +70,11 @@ func main() {
 	OVERFLOW_LIMIT := 10000
 	INPUT_FILE := os.Getenv("INPUT_FILE")
 	OUTPUT_FILE := os.Getenv("OUTPUT_FILE")
+	PARALLELISM, err := strconv.Atoi(os.Getenv("PARALLELISM"))
+	if PARALLELISM < 1 || err != nil {
+		PARALLELISM = 1
+	}
+	PARALLELISM = 10
 
 	if INPUT_FILE == "" || OUTPUT_FILE == "" {
 		fmt.Println("INPUT_FILE and OUTPUT_FILE environment variables not set")
@@ -104,7 +109,7 @@ func main() {
 		fmt.Println("Error parsing input:", err)
 		return
 	}
-	results2, err := solve2(gridMap, OVERFLOW_LIMIT, false)
+	results2, err := solve2(gridMap, OVERFLOW_LIMIT, false, PARALLELISM)
 	results = append(results, results2...)
 	if err != nil {
 		fmt.Println("Error solving 2:", err)
@@ -428,47 +433,134 @@ func findLoops(gridmap internal.Gridmap, visitedCoords []internal.DirectedObject
 	return points, nil
 }
 
-func findLoopsBruteForce(gridmap internal.Gridmap, visitedCoords []internal.DirectedObject) ([]internal.Coord, error) {
+func findLoopsBruteForce(gridmap internal.Gridmap, visitedCoords []internal.DirectedObject, parallelism int) ([]internal.Coord, error) {
 	DEBUG := os.Getenv("DEBUG") == "true"
 
-	turningPoints := map[internal.Coord]bool{}
+	// Channel to collect turning points
+	turningPointsCh := make(chan internal.Coord, len(visitedCoords))
+	// Channel to collect errors
+	errCh := make(chan error, 1)
+	// WaitGroup to wait for all workers to finish
+	var wg sync.WaitGroup
+	// Mutex to protect the turningPoints map
+	var mu sync.Mutex
+	// Map to store unique turning points
+	turningPointsMap := make(map[internal.Coord]bool)
 
-	bar := progressbar.Default(int64(len(visitedCoords) - 1))
-	// Skip the first element since it is always the starting point and cannot be a turning point
-	for _, possibleLocation := range visitedCoords[1:] {
-		bar.Add(1)
-		// Add an obstacle to the gridmap
-		if DEBUG {
-			fmt.Printf("Adding obstacle at %s\n", possibleLocation.Location())
-		}
-		updatedGridmap := gridmap.Clone()
-		updatedGridmap.SetObstructions(append(gridmap.Obstructions(), possibleLocation))
-		// Run the simulation with the updated gridmap
-		_, err := simulate(updatedGridmap, 10000, false)
-		if err != nil {
-			if DEBUG {
-				fmt.Printf("Error running simulation with obstacle at %s: %v\n", possibleLocation.Location(), err)
-			}
-			if _, ok := err.(LoopError); ok {
+	// Initialize progress bar
+	bar := progressbar.Default(int64(len(visitedCoords)))
+
+	// Create a buffered channel for tasks
+	tasksCh := make(chan internal.DirectedObject, len(visitedCoords))
+
+	// Start worker goroutines
+	for i := 0; i < parallelism; i++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			for possibleLocation := range tasksCh {
+				// Add obstacle to the gridmap
 				if DEBUG {
-					fmt.Printf("Found a TurningPoint at %s\n", possibleLocation.Location())
+					fmt.Printf("[Worker %d] Adding obstacle at %s\n", workerID, possibleLocation.Location())
 				}
-				turningPoints[possibleLocation.Location()] = true
+				updatedGridmap := gridmap.Clone()
+				updatedGridmap.SetObstructions(append(updatedGridmap.Obstructions(), possibleLocation))
+
+				// Run the simulation
+				_, err := simulate(updatedGridmap, 10000, false)
+				if err != nil {
+					if DEBUG {
+						fmt.Printf("[Worker %d] Error running simulation with obstacle at %s: %v\n", workerID, possibleLocation.Location(), err)
+					}
+					// Check if the error is of type LoopError
+					if _, ok := err.(LoopError); ok {
+						if DEBUG {
+							fmt.Printf("[Worker %d] Found a TurningPoint at %s\n", workerID, possibleLocation.Location())
+						}
+						// Send the turning point to the channel
+						turningPointsCh <- possibleLocation.Location()
+					} else {
+						// Send the first non-LoopError encountered
+						select {
+						case errCh <- err:
+						default:
+						}
+						return
+					}
+				}
+				// Update the progress bar
+				bar.Add(1)
+			}
+		}(i + 1)
+	}
+
+	// Send tasks to the workers
+	go func() {
+		// Skip the first element as it's the starting point
+		for _, possibleLocation := range visitedCoords {
+			tasksCh <- possibleLocation
+		}
+		if DEBUG {
+			fmt.Println("[Main] All tasks sent to workers")
+		}
+		close(tasksCh)
+	}()
+
+	// Goroutine to wait for all workers and then close the turningPointsCh
+	go func() {
+		wg.Wait()
+		if DEBUG {
+			fmt.Println("[Main] All workers have finished")
+		}
+		close(turningPointsCh)
+	}()
+
+	// Collect turning points and handle errors
+	for {
+		select {
+		case point, ok := <-turningPointsCh:
+			if !ok {
+				fmt.Println("[Main] All turning points collected")
+				fmt.Println("[Main] Closing turningPointsCh")
+
+				// Channel closed, all turning points received
+				turningPointsCh = nil
+				errCh = nil
+
 			} else {
+				if DEBUG {
+					fmt.Printf("[Main] Received TurningPoint at %s\n", point)
+					fmt.Println("[Main] Locking Mutex")
+				}
+				mu.Lock()
+				turningPointsMap[point] = true
+				if DEBUG {
+					fmt.Println("[Main] Unlocking Mutex")
+				}
+				mu.Unlock()
+			}
+		case err, ok := <-errCh:
+			if ok {
+				// An error occurred, return immediately
 				return nil, err
 			}
+			errCh = nil
+		}
+		if turningPointsCh == nil && errCh == nil {
+			break
 		}
 	}
 
-	points := []internal.Coord{}
-	for point := range turningPoints {
+	// Convert the map to a slice
+	points := make([]internal.Coord, 0, len(turningPointsMap))
+	for point := range turningPointsMap {
 		points = append(points, point)
 	}
 
 	return points, nil
 }
 
-func solve2(gridMap internal.Gridmap, overflowLimit int, visualize bool) ([]string, error) {
+func solve2(gridMap internal.Gridmap, overflowLimit int, visualize bool, parallelism int) ([]string, error) {
 	DEBUG := os.Getenv("DEBUG") == "true"
 
 	results := []string{}
@@ -481,7 +573,7 @@ func solve2(gridMap internal.Gridmap, overflowLimit int, visualize bool) ([]stri
 
 	turningPointsGridmap := gridMap.Clone()
 	//turningPoints, err := findLoops(turningPointsGridmap, visitedCoords)
-	turningPoints, err := findLoopsBruteForce(turningPointsGridmap, visitedCoords)
+	turningPoints, err := findLoopsBruteForce(turningPointsGridmap, visitedCoords, parallelism)
 	if err != nil {
 		return nil, err
 	}

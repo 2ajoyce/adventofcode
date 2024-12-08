@@ -33,6 +33,7 @@ func TestMain(t *testing.T) {
 	os.Setenv("INPUT_FILE", INPUT_FILE)
 	os.Setenv("OUTPUT_FILE", OUTPUT_FILE)
 	os.Setenv("DEBUG", "true")
+	os.Setenv("PARALLELISM", "1")
 
 	// Don't forget to clean up! :D
 	defer os.Remove(INPUT_FILE)
