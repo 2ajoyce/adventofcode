@@ -237,18 +237,19 @@ func simulate(gridMap internal.Gridmap, overflowLimit int, visualize bool) ([]in
 				if DEBUG == "true" {
 					fmt.Printf("Guard turned right to %s\n", guard.FacingDirection())
 				}
-			}
-			if DEBUG == "true" {
-				fmt.Printf("Moving guard from %s to %s\n", guard.Location(), newCoords)
-			}
-			// Move the guard forward
-			guard, err = guard.Move()
-			if err != nil {
-				return nil, fmt.Errorf("error moving guard forward from %s: %v", guard.Location(), err)
-			}
+			} else {
+				if DEBUG == "true" {
+					fmt.Printf("Moving guard from %s to %s\n", guard.Location(), newCoords)
+				}
+				// Move the guard forward
+				guard, err = guard.Move()
+				moves++
+				if err != nil {
+					return nil, fmt.Errorf("error moving guard forward from %s: %v", guard.Location(), err)
+				}
 
+			}
 			moved = true
-			moves++
 			guards := gridMap.Guards()
 			guards[i] = guard
 			gridMap.SetGuards(guards)
@@ -459,26 +460,33 @@ func findLoopsBruteForce(gridmap internal.Gridmap, visitedCoords []internal.Dire
 		go func(workerID int) {
 			defer wg.Done()
 			for possibleLocation := range tasksCh {
+				// Shift the possible location one step in the direction of travel
+				inFrontOfPossLoc, err := possibleLocation.Move()
+				if err != nil {
+					errCh <- err
+					return
+				}
+
 				// Add obstacle to the gridmap
 				if DEBUG {
-					fmt.Printf("[Worker %d] Adding obstacle at %s\n", workerID, possibleLocation.Location())
+					fmt.Printf("[Worker %d] Adding obstacle at %s\n", workerID, inFrontOfPossLoc.Location())
 				}
 				updatedGridmap := gridmap.Clone()
-				updatedGridmap.SetObstructions(append(updatedGridmap.Obstructions(), possibleLocation))
+				updatedGridmap.SetObstructions(append(updatedGridmap.Obstructions(), inFrontOfPossLoc))
 
 				// Run the simulation
-				_, err := simulate(updatedGridmap, 10000, false)
+				_, err = simulate(updatedGridmap, 10000, false)
 				if err != nil {
 					if DEBUG {
-						fmt.Printf("[Worker %d] Error running simulation with obstacle at %s: %v\n", workerID, possibleLocation.Location(), err)
+						fmt.Printf("[Worker %d] Error running simulation with obstacle at %s: %v\n", workerID, inFrontOfPossLoc.Location(), err)
 					}
 					// Check if the error is of type LoopError
 					if _, ok := err.(LoopError); ok {
 						if DEBUG {
-							fmt.Printf("[Worker %d] Found a TurningPoint at %s\n", workerID, possibleLocation.Location())
+							fmt.Printf("[Worker %d] Found a TurningPoint at %s\n", workerID, inFrontOfPossLoc.Location())
 						}
 						// Send the turning point to the channel
-						turningPointsCh <- possibleLocation.Location()
+						turningPointsCh <- inFrontOfPossLoc.Location()
 					} else {
 						// Send the first non-LoopError encountered
 						select {
