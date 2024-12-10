@@ -87,7 +87,7 @@ type SpatialMap interface {
 	GetIndex(x, y int) int
 	removeEntity(x, y int, entityId uuid.UUID) (bool, error) // Mutation functions are private
 	addEntity(x, y int, entityId uuid.UUID) (bool, error)    // Renamed from setEntity
-	ValidateCoord(x, y int) (bool, error)
+	ValidateCoord(x, y int) bool
 }
 
 type spatialMap struct {
@@ -120,19 +120,19 @@ func (m *spatialMap) GetIndex(x, y int) int {
 }
 
 func (m *spatialMap) GetCell(x, y int) (SpatialMapCell, error) {
-	if valid, _ := m.ValidateCoord(x, y); !valid {
+	if valid := m.ValidateCoord(x, y); !valid {
 		return nil, fmt.Errorf("coordinates (%d, %d) are out of bounds", x, y)
 	}
 	index := m.GetIndex(x, y)
 	return m.cells[index], nil
 }
 
-func (m *spatialMap) ValidateCoord(x, y int) (bool, error) {
+func (m *spatialMap) ValidateCoord(x, y int) bool {
 	// Check if the position is within bounds
 	if x < 0 || x >= m.GetWidth() || y < 0 || y >= m.GetHeight() {
-		return false, fmt.Errorf("position (%d, %d) out of bounds", x, y)
+		return false
 	}
-	return true, nil
+	return true
 }
 
 func (m *spatialMap) addEntity(x, y int, entityId uuid.UUID) (bool, error) {
@@ -248,9 +248,8 @@ func (s *simulation) AddEntity(e Entity, x, y int) (Entity, error) {
 	defer s.updateMutex.Unlock()
 
 	// Validate the coordinates before adding the entity
-	valid, err := s.spatialMap.ValidateCoord(x, y)
-	if err != nil || !valid {
-		return nil, fmt.Errorf("invalid coordinates for new entity: %v", err)
+	if valid := s.spatialMap.ValidateCoord(x, y); !valid {
+		return nil, fmt.Errorf("invalid coordinates for new entity")
 	}
 
 	// Add the entity to the spatial map at the specified coordinates
@@ -313,9 +312,8 @@ func (s *simulation) MoveEntity(entityId uuid.UUID, newX, newY int) (bool, error
 	defer s.updateMutex.Unlock()
 
 	// Validate the new coordinates
-	success, err := s.spatialMap.ValidateCoord(newX, newY)
-	if err != nil || !success {
-		return false, fmt.Errorf("invalid coordinates for moving entity: %v", err)
+	if success := s.spatialMap.ValidateCoord(newX, newY); !success {
+		return false, fmt.Errorf("invalid coordinates for moving entity")
 	}
 
 	// Find the index of the entity
@@ -328,7 +326,7 @@ func (s *simulation) MoveEntity(entityId uuid.UUID, newX, newY int) (bool, error
 	currentX, currentY := s.entities[index].GetPosition()
 
 	// Remove the entity from its current cell
-	success, err = s.spatialMap.removeEntity(currentX, currentY, entityId)
+	success, err := s.spatialMap.removeEntity(currentX, currentY, entityId)
 	if err != nil || !success {
 		return false, err
 	}

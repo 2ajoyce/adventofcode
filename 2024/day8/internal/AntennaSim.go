@@ -72,15 +72,51 @@ func (as *AntennaSimulation) AddAntenna(newAnt *Antenna, x int, y int) (*Antenna
 	return ant.(*Antenna), nil
 }
 
+// Helper function to place antinodes in a given direction until out of bounds
+func (as *AntennaSimulation) placeAntinodesInDirection(startX, startY, ux, uy, step int) error {
+	DEBUG := os.Getenv("DEBUG") == "true"
+
+	x := startX + ux*step
+	y := startY + uy*step
+
+	for {
+		if DEBUG {
+			fmt.Printf("Checking position (%d, %d)\n", x, y)
+		}
+
+		if valid := as.GetMap().ValidateCoord(x, y); !valid {
+			if DEBUG {
+				fmt.Printf("Antinode position (%d, %d) is out of bounds. Stopping in this direction.\n", x, y)
+			}
+			break
+		}
+
+		// Place antinode
+		if DEBUG {
+			fmt.Printf("Placing antinode at (%d, %d)\n", x, y)
+		}
+		if err := as.placeAntinode(x, y); err != nil {
+			return fmt.Errorf("failed to place antinode at (%d, %d): %v", x, y, err)
+		}
+		// Move to the next position in the direction
+		x += ux * step
+		y += uy * step
+		if DEBUG {
+			fmt.Printf("Moving to next position in direction (%d, %d)\n", ux, uy)
+		}
+	}
+
+	return nil
+}
+
 // updateAntinodes updates the antinodes in the simulation based on the current antennas.
 func (as *AntennaSimulation) updateAntinodes() (*AntennaSimulation, error) {
 	// Antinodes occur when two antennas with the same signal are in line with each other
-	// Each pair of aligned antennas will create two antinodes, one at either end of the line
-	// The line is always symmetric about the midpoint of the antennas
-	// The distance between the midpoint and the antenna is half the distance between the antennas
-	// The distance between the antennas is the same as the distance between each antenna and the antinode
+	// Each pair of aligned antennas will create a line of antinodes
+	// The spacing between each antinode is the same as the distance between the antenna and the first antinode
 
 	DEBUG := os.Getenv("DEBUG") == "true"
+
 	// First, remove all existing antinodes
 	entities := as.GetEntities()
 	for _, e := range entities {
@@ -114,10 +150,6 @@ func (as *AntennaSimulation) updateAntinodes() (*AntennaSimulation, error) {
 		fmt.Printf("The map contains %d antennas\n", antennaCount)
 		fmt.Printf("The map contains %d signals\n", len(antennaMap))
 	}
-
-	m := as.GetMap()
-	width := m.GetWidth()
-	height := m.GetHeight()
 
 	// For each signal group, examine every pair of antennas
 	for signal, ants := range antennaMap {
@@ -162,27 +194,31 @@ func (as *AntennaSimulation) updateAntinodes() (*AntennaSimulation, error) {
 						x1, y1, x2, y2, dx, dy, stepGCD, ux, uy)
 				}
 
-				// Antinodes appear one "stepGCD" unit beyond each antenna along the same line
-				antinodePositions := [][2]int{
-					{x1 - ux*stepGCD, y1 - uy*stepGCD},
-					{x2 + ux*stepGCD, y2 + uy*stepGCD},
+				// Place an antinode at the location of both antennas
+				if DEBUG {
+					fmt.Printf("Placing antinode at (%d,%d) and (%d,%d)\n", x1, y1, x2, y2)
+				}
+				if err := as.placeAntinode(x1, y1); err != nil {
+					return as, fmt.Errorf("error placing antinode at (%d,%d): %v", x1, y1, err)
+				}
+				if err := as.placeAntinode(x2, y2); err != nil {
+					return as, fmt.Errorf("error placing antinode at (%d,%d): %v", x2, y2, err)
 				}
 
-				for _, pos := range antinodePositions {
-					px, py := pos[0], pos[1]
-					if px >= 0 && px < width && py >= 0 && py < height {
-						if DEBUG {
-							fmt.Printf("Placing antinode at (%d, %d)\n", px, py)
-						}
-						err := as.placeAntinode(px, py)
-						if err != nil {
-							return as, fmt.Errorf("failed to place antinode at (%d, %d): %v", px, py, err)
-						}
-					} else {
-						if DEBUG {
-							fmt.Printf("Antinode position (%d, %d) is out of bounds. Skipping.\n", px, py)
-						}
-					}
+				// Calculate spacing (distance between antenna and first antinode)
+				spacing := stepGCD
+
+				// Place antinodes in both directions using the helper function
+				// Starting from a1, stepping backward
+				err := as.placeAntinodesInDirection(x1, y1, -ux, -uy, spacing)
+				if err != nil {
+					return as, err
+				}
+
+				// Starting from a2, stepping forward
+				err = as.placeAntinodesInDirection(x2, y2, ux, uy, spacing)
+				if err != nil {
+					return as, err
 				}
 			}
 		}
@@ -251,20 +287,6 @@ func abs(i int) int {
 		return -i
 	}
 	return i
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 type Antinode struct {

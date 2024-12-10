@@ -36,7 +36,7 @@ func SetUpTestInput(t *testing.T, INPUT_FILE string) (total int, inputData []str
 	inputData = append(inputData, ".........A..\n")
 	inputData = append(inputData, "............\n")
 	inputData = append(inputData, "............")
-	total = 14
+	total = 34
 	return total, inputData
 }
 
