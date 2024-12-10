@@ -11,73 +11,83 @@ import (
 // ERRORS
 /////////////////////////////////////////////////////////////////////////////////////
 
-type CellOccupiedError struct {
-	entityId uuid.UUID
+type CellEmptyError struct{}
+
+func (e CellEmptyError) Error() string {
+	return "cell is empty"
 }
 
-func (e CellOccupiedError) Error() string {
-	return fmt.Sprintf("cell is already occupied by %s", e.entityId)
-}
-
-// ///////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////
 // SPATIAL MAP CELLS
-// ///////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////
+
 type SpatialMapCell interface {
-	GetEntityId() uuid.UUID
-	IsAntinode() bool
-	setEntityId(entityId uuid.UUID) (bool, error)
-	setAntinode(antinode bool) (bool, error)
+	GetEntityIds() ([]uuid.UUID, error)
+	AddEntityId(entityId uuid.UUID) (bool, error)
+	RemoveEntityId(entityId uuid.UUID) (bool, error)
 }
 
 type spatialMapCell struct {
-	entityId uuid.UUID
-	antinode bool
+	entityIds []uuid.UUID
+	mu        sync.RWMutex // To handle concurrent access
 }
 
 func NewSpatialMapCell() SpatialMapCell {
-	return &spatialMapCell{
-		entityId: uuid.Nil,
-		antinode: false,
+	c := new(spatialMapCell)
+	c.entityIds = []uuid.UUID{}
+	return c
+}
+
+func (c *spatialMapCell) GetEntityIds() ([]uuid.UUID, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if len(c.entityIds) == 0 {
+		return nil, CellEmptyError{}
 	}
+	// Return a copy to prevent external modification
+	idsCopy := make([]uuid.UUID, len(c.entityIds))
+	copy(idsCopy, c.entityIds)
+	return idsCopy, nil
 }
 
-func (c *spatialMapCell) GetEntityId() uuid.UUID {
-	return c.entityId
-}
-
-func (c *spatialMapCell) IsAntinode() bool {
-	return c.antinode
-}
-
-func (c *spatialMapCell) setEntityId(entityId uuid.UUID) (bool, error) {
-	// Check if the cell is already occupied by another entity before setting a new one.
-	if c.entityId != uuid.Nil {
-		return false, CellOccupiedError{entityId: c.GetEntityId()}
+func (c *spatialMapCell) AddEntityId(entityId uuid.UUID) (bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	// Check if the entity already exists in the cell
+	for _, id := range c.entityIds {
+		if id == entityId {
+			return false, fmt.Errorf("entity %s already exists in the cell", entityId)
+		}
 	}
-	c.entityId = entityId
+	c.entityIds = append(c.entityIds, entityId)
 	return true, nil
 }
 
-func (c *spatialMapCell) setAntinode(status bool) (bool, error) {
-	if c.antinode == status {
-		return false, nil
+func (c *spatialMapCell) RemoveEntityId(entityId uuid.UUID) (bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for i, id := range c.entityIds {
+		if id == entityId {
+			// Remove the entityId from the slice
+			c.entityIds = append(c.entityIds[:i], c.entityIds[i+1:]...)
+			return true, nil
+		}
 	}
-	c.antinode = status
-	return true, nil
+	return false, fmt.Errorf("entity %s not found in the cell", entityId)
 }
 
-// ///////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////
 // SPATIAL MAP
-// ///////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////
+
 type SpatialMap interface {
-	GetWidth() int
-	GetHeight() int
-	GetIndex(x, y int) int
 	GetCell(x, y int) (SpatialMapCell, error)
+	GetHeight() int
+	GetWidth() int
+	GetIndex(x, y int) int
+	removeEntity(x, y int, entityId uuid.UUID) (bool, error) // Mutation functions are private
+	addEntity(x, y int, entityId uuid.UUID) (bool, error)    // Renamed from setEntity
 	ValidateCoord(x, y int) (bool, error)
-	setEntity(x, y int, entityId uuid.UUID) (bool, error)
-	removeEntity(x, y int) (bool, error)
-	setAntinode(x, y int, status bool) (bool, error)
 }
 
 type spatialMap struct {
@@ -87,18 +97,14 @@ type spatialMap struct {
 }
 
 func NewSpatialMap(width, height int) SpatialMap {
-	cells := make([]SpatialMapCell, width*height)
-	for i := range cells {
-		cells[i] = &spatialMapCell{
-			entityId: uuid.Nil,
-			antinode: false, // default antinode status
-		}
+	m := new(spatialMap)
+	m.width = width
+	m.height = height
+	m.cells = make([]SpatialMapCell, width*height)
+	for i := range m.cells {
+		m.cells[i] = NewSpatialMapCell()
 	}
-	return &spatialMap{
-		width:  width,
-		height: height,
-		cells:  cells,
-	}
+	return m
 }
 
 func (m *spatialMap) GetWidth() int {
@@ -129,38 +135,31 @@ func (m *spatialMap) ValidateCoord(x, y int) (bool, error) {
 	return true, nil
 }
 
-func (m *spatialMap) setEntity(x, y int, entityId uuid.UUID) (bool, error) {
+func (m *spatialMap) addEntity(x, y int, entityId uuid.UUID) (bool, error) {
 	cell, err := m.GetCell(x, y)
 	if err != nil {
 		return false, err
 	}
-	return cell.setEntityId(entityId)
+	return cell.AddEntityId(entityId)
 }
 
-func (m *spatialMap) removeEntity(x, y int) (bool, error) {
+func (m *spatialMap) removeEntity(x, y int, entityId uuid.UUID) (bool, error) {
 	cell, err := m.GetCell(x, y)
 	if err != nil {
 		return false, err
 	}
 
-	return cell.setEntityId(uuid.Nil)
+	return cell.RemoveEntityId(entityId)
 }
 
-func (m *spatialMap) setAntinode(x, y int, status bool) (bool, error) {
-	cell, err := m.GetCell(x, y)
-	if err != nil {
-		return false, err
-	}
-	return cell.setAntinode(status)
-}
-
-// ///////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////
 // ENTITY
-// ///////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////
+
 type Entity interface {
 	GetId() uuid.UUID
 	GetPosition() (int, int)
-	setPosition(x, y int) (bool, error)
+	setPosition(x, y int) (bool, error) // Mutation functions are private
 }
 
 type entity struct {
@@ -169,11 +168,21 @@ type entity struct {
 	y  int
 }
 
-func (e entity) GetId() uuid.UUID {
+func NewEntity() (Entity, error) {
+	e := new(entity)
+	id, err := uuid.NewV7()
+	if err != nil {
+		return nil, err
+	}
+	e.id = id
+	return e, nil
+}
+
+func (e *entity) GetId() uuid.UUID {
 	return e.id
 }
 
-func (e entity) GetPosition() (int, int) {
+func (e *entity) GetPosition() (int, int) {
 	return e.x, e.y
 }
 
@@ -183,15 +192,17 @@ func (e *entity) setPosition(x, y int) (bool, error) {
 	return true, nil
 }
 
-// ///////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////
 // SIMULATION
-// ///////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////
+
 type Simulation interface {
-	GetMap() SpatialMap
+	AddEntity(e Entity, x, y int) (Entity, error)
+	GetEntity(entityId uuid.UUID) (Entity, error)
 	GetEntities() []Entity
 	MoveEntity(entityId uuid.UUID, newX, newY int) (bool, error)
-	AddEntity(x, y int, antinode bool) (Entity, error)
 	RemoveEntity(entityId uuid.UUID) (bool, error)
+	GetMap() SpatialMap
 }
 
 type simulation struct {
@@ -202,24 +213,36 @@ type simulation struct {
 }
 
 func NewSimulation(width, height int) Simulation {
-	return &simulation{
-		updateMutex: sync.Mutex{},
-		spatialMap:  NewSpatialMap(width, height),
-		entities:    make([]Entity, 0),
-		entityMap:   make(map[uuid.UUID]int),
-	}
+	s := new(simulation)
+	s.spatialMap = NewSpatialMap(width, height)
+	s.entities = make([]Entity, 0)
+	s.entityMap = make(map[uuid.UUID]int)
+	return s
 }
 
 func (s *simulation) GetMap() SpatialMap {
 	return s.spatialMap
 }
 
-// GetEntities returns a copy of the current list of entities.
-func (s *simulation) GetEntities() []Entity {
-	return s.entities
+func (s *simulation) GetEntity(entityId uuid.UUID) (Entity, error) {
+	// Get the entities index from the entityMap
+	index, ok := s.entityMap[entityId]
+	if !ok {
+		return nil, fmt.Errorf("entity with ID %s not found", entityId)
+	}
+	return s.entities[index], nil
 }
 
-func (s *simulation) AddEntity(x, y int, antinode bool) (Entity, error) {
+// GetEntities returns a copy of the current list of entities.
+func (s *simulation) GetEntities() []Entity {
+	s.updateMutex.Lock()
+	defer s.updateMutex.Unlock()
+	entitiesCopy := make([]Entity, len(s.entities))
+	copy(entitiesCopy, s.entities)
+	return entitiesCopy
+}
+
+func (s *simulation) AddEntity(e Entity, x, y int) (Entity, error) {
 	// Lock the mutex to ensure thread safety when adding entities
 	s.updateMutex.Lock()
 	defer s.updateMutex.Unlock()
@@ -230,31 +253,25 @@ func (s *simulation) AddEntity(x, y int, antinode bool) (Entity, error) {
 		return nil, fmt.Errorf("invalid coordinates for new entity: %v", err)
 	}
 
-	// Create a new entity and add it to the simulation
-	newId, err := uuid.NewV7()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate UUID: %v", err)
-	}
-
-	newEntity := &entity{id: newId, x: x, y: y}
-	s.entities = append(s.entities, newEntity)
-
 	// Add the entity to the spatial map at the specified coordinates
-	success, err := s.spatialMap.setEntity(x, y, newEntity.id)
+	success, err := s.spatialMap.addEntity(x, y, e.GetId())
 	if err != nil || !success {
 		return nil, err
 	}
 
-	// Set the antinode status if specified
-	success, err = s.spatialMap.setAntinode(x, y, antinode)
-	if err != nil || !success {
+	// Update the entity's position
+	_, err = e.setPosition(x, y)
+	if err != nil {
+		// Rollback if setting position fails
+		s.spatialMap.removeEntity(x, y, e.GetId())
 		return nil, err
 	}
 
-	// Add the entity to the map for quick lookup
-	s.entityMap[newEntity.id] = len(s.entities) - 1
+	// Add the entity to the slice and map
+	s.entities = append(s.entities, e)
+	s.entityMap[e.GetId()] = len(s.entities) - 1
 
-	return newEntity, nil
+	return e, nil
 }
 
 func (s *simulation) RemoveEntity(entityId uuid.UUID) (bool, error) {
@@ -272,29 +289,19 @@ func (s *simulation) RemoveEntity(entityId uuid.UUID) (bool, error) {
 	entityToRemove := s.entities[index]
 	x, y := entityToRemove.GetPosition()
 
-	// Get the cell at the entity's position in the spatial map
-	cell, err := s.spatialMap.GetCell(x, y)
-	if err != nil {
+	// Remove the entity from the spatial map
+	success, err := s.spatialMap.removeEntity(x, y, entityId)
+	if err != nil || !success {
 		return false, err
-	}
-
-	// Check if the entity at those coordinates is the one we want to remove
-	if entityId != entityToRemove.GetId() || entityToRemove.GetId() != cell.GetEntityId() {
-		return false, fmt.Errorf("entity with ID %v not found at coordinates (%d, %d)", entityId, x, y)
 	}
 
 	// Remove the entity from the slice and update the map
 	lastIndex := len(s.entities) - 1
-	s.entities[index] = s.entities[lastIndex]
-	delete(s.entityMap, s.entities[lastIndex].GetId())
-
-	// Update the spatial map to remove the entity
-	success, err := s.spatialMap.removeEntity(x, y)
-	if !success || err != nil {
-		return false, err
+	if index != lastIndex {
+		s.entities[index] = s.entities[lastIndex]
+		s.entityMap[s.entities[lastIndex].GetId()] = index
 	}
-
-	// Remove the last element from the slice
+	delete(s.entityMap, entityId)
 	s.entities = s.entities[:lastIndex]
 
 	return true, nil
@@ -305,7 +312,7 @@ func (s *simulation) MoveEntity(entityId uuid.UUID, newX, newY int) (bool, error
 	s.updateMutex.Lock()
 	defer s.updateMutex.Unlock()
 
-	// Check if the new position is within bounds
+	// Validate the new coordinates
 	success, err := s.spatialMap.ValidateCoord(newX, newY)
 	if err != nil || !success {
 		return false, fmt.Errorf("invalid coordinates for moving entity: %v", err)
@@ -314,22 +321,37 @@ func (s *simulation) MoveEntity(entityId uuid.UUID, newX, newY int) (bool, error
 	// Find the index of the entity
 	index, ok := s.entityMap[entityId]
 	if !ok {
-		return false, fmt.Errorf("entity %d not found", entityId)
+		return false, fmt.Errorf("entity %s not found", entityId)
 	}
 
-	// Using the index, get the coords
-	x, y := s.entities[index].GetPosition()
+	// Get the current position of the entity
+	currentX, currentY := s.entities[index].GetPosition()
 
-	// Remove the entity from the map
-	success, err = s.spatialMap.removeEntity(x, y)
-	if err != nil {
-		return success, err
+	// Remove the entity from its current cell
+	success, err = s.spatialMap.removeEntity(currentX, currentY, entityId)
+	if err != nil || !success {
+		return false, err
 	}
-	// Set the entity in the new position on the map
-	success, err = s.spatialMap.setEntity(newX, newY, entityId)
-	if err != nil {
-		return success, err
+
+	// Add the entity to the new cell
+	success, err = s.spatialMap.addEntity(newX, newY, entityId)
+	if err != nil || !success {
+		// Attempt to re-add the entity to its original cell in case of failure
+		success, rollbackErr := s.spatialMap.addEntity(currentX, currentY, entityId)
+		if !success || rollbackErr != nil {
+			return false, fmt.Errorf("failed to move entity and failed to rollback: %v", rollbackErr)
+		}
+		return false, err
 	}
-	s.entities[index].setPosition(newX, newY)
+
+	// Update the entity's position
+	_, err = s.entities[index].setPosition(newX, newY)
+	if err != nil {
+		// Attempt to rollback the move if setting position fails
+		s.spatialMap.removeEntity(newX, newY, entityId)
+		s.spatialMap.addEntity(currentX, currentY, entityId)
+		return false, err
+	}
+
 	return true, nil
 }

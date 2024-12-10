@@ -76,8 +76,8 @@ func TestMain(t *testing.T) {
 	defer os.Unsetenv("OUTPUT_FILE")
 	os.Setenv("PARALLELISM", "1")
 	defer os.Unsetenv("PARALLELISM")
-	//os.Setenv("DEBUG", "true")
-	//defer os.Unsetenv("DEBUG")
+	os.Setenv("DEBUG", "true")
+	defer os.Unsetenv("DEBUG")
 
 	// Set up the input data
 	total, inputData := SetUpTestInput(t, INPUT_FILE)
@@ -91,7 +91,7 @@ func TestMain(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to read %s: %v", OUTPUT_FILE, err)
 	}
-	expectedContent := fmt.Sprintf("Unique Antinode Locations: %d", &total)
+	expectedContent := fmt.Sprintf("Unique Antinode Locations: %d", total)
 	valid := validateOutput(t, string(data), expectedContent)
 	if valid {
 		os.Remove(INPUT_FILE)
@@ -125,7 +125,7 @@ func TestMainParallel(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to read %s: %v", OUTPUT_FILE, err)
 	}
-	expectedContent := fmt.Sprintf("Unique Antinode Locations: %d", &total)
+	expectedContent := fmt.Sprintf("Unique Antinode Locations: %d", total)
 	valid := validateOutput(t, string(data), expectedContent)
 	if valid {
 		os.Remove(INPUT_FILE)

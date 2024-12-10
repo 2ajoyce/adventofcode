@@ -2,7 +2,7 @@ package main
 
 import (
 	"bufio"
-	"day8/internal/simulation"
+	"day8/internal"
 	"fmt"
 	"os"
 	"strconv"
@@ -61,7 +61,7 @@ func main() {
 	if PARALLELISM < 1 || err != nil {
 		PARALLELISM = 1
 	}
-	fmt.Printf("PARALLELISM: %d\n", PARALLELISM)
+	fmt.Printf("PARALLELISM: %d\n\n", PARALLELISM)
 
 	if INPUT_FILE == "" || OUTPUT_FILE == "" {
 		fmt.Println("INPUT_FILE and OUTPUT_FILE environment variables not set")
@@ -116,9 +116,13 @@ func main() {
 	fmt.Printf("Successfully processed %s and created %s", INPUT_FILE, OUTPUT_FILE)
 }
 
-func parseLines(lines []string) (simulation.Simulation, error) {
-	//DEBUG := os.Getenv("DEBUG")
-	sim := simulation.NewSimulation(len(lines[0]), len(lines))
+func parseLines(lines []string) (*internal.AntennaSimulation, error) {
+	DEBUG := os.Getenv("DEBUG") == "true"
+	fmt.Println("Parsing Input...")
+	sim, err := internal.NewAntennaSimulation(len(lines[0]), len(lines))
+	if err != nil {
+		return nil, err
+	}
 	for y, line := range lines {
 		c := strings.Split(line, "")
 		for x, char := range c {
@@ -126,9 +130,21 @@ func parseLines(lines []string) (simulation.Simulation, error) {
 			case ".": // These indicate empty cells
 				continue
 			default: // A cell with any other character is considered an entity
-				// TODO: There needs to be a way to indicate type of entity
-				sim.AddEntity(x, y, false)
+				if DEBUG {
+					fmt.Printf("Creating antenna at (%d,%d)\n", x, y)
+				}
+				a, err := internal.NewAntenna(char)
+				if err != nil {
+					return nil, err
+				}
 
+				insertedAnt, err := sim.AddAntenna(a, x, y)
+				if err != nil {
+					return nil, err
+				}
+				if DEBUG {
+					fmt.Printf("Inserted antenna at (%d,%d) with signal: %s\n", x, y, insertedAnt)
+				}
 			}
 		}
 	}
@@ -136,17 +152,21 @@ func parseLines(lines []string) (simulation.Simulation, error) {
 	return sim, nil
 }
 
-func solve1(sim simulation.Simulation, parallelism int) ([]string, error) {
+func solve1(sim *internal.AntennaSimulation, parallelism int) ([]string, error) {
 	//DEBUG := os.Getenv("DEBUG") == "true"
-
-	results := []string{}
-
-	//resultChan := make(chan bool)
-	//doneChan := make(chan bool)
-	//errorChan := make(chan error)
-	//bar := progressbar.Default(int64(len(equations)))
+	fmt.Println("Beginning Solve 1")
+	fmt.Println(sim)
+	// Count the number of antinodes in the simulation
+	entities := sim.GetEntities()
 	rollingTotal := 0
-	results = append(results, fmt.Sprintf("Unique Locations: %d", rollingTotal))
-
+	for _, entity := range entities {
+		switch entity.(type) {
+		case *internal.Antinode:
+			rollingTotal++
+		}
+	}
+	fmt.Printf("Found %d antinodes\n", rollingTotal)
+	results := []string{}
+	results = append(results, fmt.Sprintf("Unique Antinode Locations: %d", rollingTotal))
 	return results, nil
 }
