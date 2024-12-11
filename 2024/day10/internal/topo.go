@@ -165,16 +165,16 @@ func ScoreTrailhead(sim simulation.Simulation, trailhead Coord) (score int, err 
 		}
 
 		if currentZ == 9 {
-			priorTrailEnds := trailHeadToEnd[trailhead]
+			// priorTrailEnds := trailHeadToEnd[trailhead]
 			alreadyVisited := false
-			for _, end := range priorTrailEnds {
-				// If we have already scored this trailend, skip it
-				// Optionally, we could skip the rest of this loop
-				if end == current {
-					alreadyVisited = true
-					break
-				}
-			}
+			// for _, end := range priorTrailEnds {
+			// 	// If we have already scored this trailend, skip it
+			// 	// Optionally, we could skip the rest of this loop
+			// 	if end == current {
+			// 		alreadyVisited = true
+			// 		break
+			// 	}
+			// }
 			if alreadyVisited {
 				if DEBUG {
 					fmt.Printf("Already visited Coord%s, skipping\n", current)
