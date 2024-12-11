@@ -2,7 +2,7 @@ package main
 
 import (
 	"bufio"
-	"day8/internal"
+	"day9/internal"
 	"fmt"
 	"os"
 	"strconv"
@@ -91,17 +91,6 @@ func main() {
 		return
 	}
 
-	// input, err = parseLines(lines)
-	// if err != nil {
-	// 	fmt.Println("Error parsing input:", err)
-	// 	return
-	// }
-	// results2, err := solve2(input, PARALLELISM)
-	// results = append(results, results2...)
-	// if err != nil {
-	// 	fmt.Println("Error solving 2:", err)
-	// 	return
-	//}
 	////////////////////////////////////////////////////////////////////
 	// End Solution Logic  /////////////////////////////////////////////
 	////////////////////////////////////////////////////////////////////

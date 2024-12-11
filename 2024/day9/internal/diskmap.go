@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/big"
 	"sort"
+	"strings"
 )
 
 // DiskMap represents the mapping of files to disk blocks.
@@ -99,110 +100,191 @@ func (dm *DiskMap) UpdateChecksum() *big.Int {
 	return dm.GetChecksum()
 }
 
+// String returns a string representation of the DiskMap.
+// Occupied blocks are represented by their file IDs, and empty blocks by '.'.
+// Example: [1..2.1.2.1.3333]
 func (dm *DiskMap) String() string {
-	// Find the maximum block index to determine the range of blocks.
-	maxBlockIndex := -1
-	for blockIndex := range dm.blockToFile {
-		if blockIndex > maxBlockIndex {
-			maxBlockIndex = blockIndex
+	if len(dm.blockToFile) == 0 {
+		return "[]"
+	}
+
+	// Determine the range of blocks.
+	var maxBlock int
+	for block := range dm.blockToFile {
+		if block > maxBlock {
+			maxBlock = block
 		}
 	}
 
-	// Build the string representation.
-	var result string
-	result += "["
-	for i := 0; i <= maxBlockIndex; i++ {
-		if fileID, exists := dm.blockToFile[i]; exists {
-			result += fmt.Sprintf("%d", fileID)
+	// Use a strings.Builder for efficient string concatenation.
+	var sb strings.Builder
+	sb.WriteString("[")
+
+	for block := 0; block <= maxBlock; block++ {
+		if fileID, exists := dm.blockToFile[block]; exists {
+			sb.WriteString(fmt.Sprintf("%d", fileID))
 		} else {
-			result += "."
+			sb.WriteString(".")
 		}
 	}
-	result += "]"
 
-	return result
+	sb.WriteString("]")
+
+	return sb.String()
 }
 
-
-// Compact reorganizes the DiskMap by moving the highest block ID to the smallest available empty block ID.
-// It does not attempt to keep file blocks together.
+// Compact reorganizes the DiskMap by moving whole files to the leftmost span of free blocks that can fit the file.
+// It processes files in order of decreasing file ID and attempts to move each file exactly once.
 func (dm *DiskMap) Compact() error {
 	if len(dm.blockToFile) == 0 {
 		// No blocks to compact.
 		return nil
 	}
 
-	// Step 1: Identify all occupied blocks and determine the maximum block ID.
-	maxBlockID := -1
-	for block := range dm.blockToFile {
-		if block > maxBlockID {
-			maxBlockID = block
-		}
+	// Step 1: Sort files in order of decreasing file ID.
+	fileIDs := make([]int, 0, len(dm.fileSize))
+	for fileID := range dm.fileSize {
+		fileIDs = append(fileIDs, fileID)
 	}
+	sort.Sort(sort.Reverse(sort.IntSlice(fileIDs)))
 
-	// Step 2: Identify all empty blocks (assuming blocks start at 0 and are contiguous up to maxBlockID).
-	emptyBlocks := make([]int, 0)
-	occupied := make(map[int]bool)
-	for block := range dm.blockToFile {
-		occupied[block] = true
-	}
+	// Step 2: Attempt to move each file once.
+	for _, fileID := range fileIDs {
+		// Moving Step3 and Step4 inside the loop made this much, much less performant
+		// To increase performance, the bulk search should be done once outside the loop
+		// with individual updates inside the loop to the newly empty and full spans.
 
-	for block := 0; block < maxBlockID; block++ {
-		if !occupied[block] {
-			emptyBlocks = append(emptyBlocks, block)
-		}
-	}
+		// Step 3: Identify all free blocks and determine free spans.
+		freeSpans := dm.findFreeSpans()
 
-	if len(emptyBlocks) == 0 {
-		// No empty blocks to compact.
-		return nil
-	}
+		// Step 4: Sort free spans by starting block index (leftmost first).
+		sort.Slice(freeSpans, func(i, j int) bool {
+			return freeSpans[i].start < freeSpans[j].start
+		})
 
-	// Step 3: Sort empty blocks in ascending order and occupied blocks in descending order.
-	sort.Ints(emptyBlocks)
-	occupiedBlocks := make([]int, 0)
-	for block := range dm.blockToFile {
-		occupiedBlocks = append(occupiedBlocks, block)
-	}
-	sort.Sort(sort.Reverse(sort.IntSlice(occupiedBlocks)))
-
-	// Step 4: Iterate and move blocks.
-	for _, sourceBlock := range occupiedBlocks {
-		if len(emptyBlocks) == 0 {
-			break // No more empty blocks to fill.
+		fileSize := dm.fileSize[fileID]
+		if fileSize <= 0 {
+			continue // Skip empty files
 		}
 
-		// If the source block is already in a lower position than the smallest empty block, skip.
-		if sourceBlock <= emptyBlocks[0] {
-			continue
-		}
-
-		// Move the source block to the smallest empty block.
-		targetBlock := emptyBlocks[0]
-
-		fileID := dm.blockToFile[sourceBlock]
-
-		// Update fileBlockIndex for the file.
-		blocks := dm.fileBlockIndex[fileID]
-		for i, b := range blocks {
-			if b == sourceBlock {
-				dm.fileBlockIndex[fileID][i] = targetBlock
+		// Find the first free span that can fit the entire file.
+		var suitableSpan *Span
+		for _, span := range freeSpans {
+			if span.length >= fileSize {
+				suitableSpan = &span
 				break
 			}
 		}
 
-		// Update blockToFile mapping.
-		delete(dm.blockToFile, sourceBlock)
-		dm.blockToFile[targetBlock] = fileID
+		// Find the smallest block ID in the current file's blocks.
+		currentBlocks := dm.fileBlockIndex[fileID]
+		smallestBlockId := currentBlocks[0]
+		for _, blockId := range currentBlocks {
+			if blockId < smallestBlockId {
+				smallestBlockId = blockId
+			}
+		}
+		// IF no suitable span is found
+		// OR it starts at a block ID larger than the smallest current block ID
+		if suitableSpan == nil || suitableSpan.start >= smallestBlockId {
+			// No suitable span found; do not move the file.
+			continue
+		}
 
-		// Update occupied and empty blocks lists.
-		emptyBlocks = emptyBlocks[1:]
-		occupied[sourceBlock] = false
-		occupied[targetBlock] = true
+		// Determine the target blocks for the file.
+		targetStart := suitableSpan.start
+		targetBlocks := make([]int, fileSize)
+		for i := 0; i < fileSize; i++ {
+			targetBlocks[i] = targetStart + i
+		}
+
+		// Move the file to the target blocks.
+		err := dm.moveFile(fileID, targetBlocks)
+		if err != nil {
+			return fmt.Errorf("failed to move file %d: %v", fileID, err)
+		}
 	}
 
 	// Step 5: Update the checksum after compaction.
 	dm.UpdateChecksum()
+
+	return nil
+}
+
+// Span represents a contiguous range of free blocks.
+type Span struct {
+	start  int
+	length int
+}
+
+// findFreeSpans identifies all contiguous free block spans in the DiskMap.
+func (dm *DiskMap) findFreeSpans() []Span {
+	// Determine the range of blocks.
+	var maxBlock int
+	for block := range dm.blockToFile {
+		if block > maxBlock {
+			maxBlock = block
+		}
+	}
+
+	// Iterate through blocks to find free spans.
+	var spans []Span
+	currentStart := -1
+	currentLength := 0
+
+	for block := 0; block <= maxBlock; block++ {
+		if _, occupied := dm.blockToFile[block]; !occupied {
+			if currentStart == -1 {
+				currentStart = block
+				currentLength = 1
+			} else {
+				currentLength++
+			}
+		} else {
+			if currentStart != -1 {
+				spans = append(spans, Span{start: currentStart, length: currentLength})
+				currentStart = -1
+				currentLength = 0
+			}
+		}
+	}
+
+	// Append the last span if it ends at maxBlock.
+	if currentStart != -1 {
+		spans = append(spans, Span{start: currentStart, length: currentLength})
+	}
+
+	return spans
+}
+
+// moveFile moves a file to the specified target blocks.
+// It updates fileBlockIndex and blockToFile accordingly.
+func (dm *DiskMap) moveFile(fileID int, targetBlocks []int) error {
+	// Get current blocks of the file.
+	currentBlocks, exists := dm.fileBlockIndex[fileID]
+	if !exists {
+		return fmt.Errorf("file ID %d not found", fileID)
+	}
+
+	// Check if target blocks are free.
+	for _, block := range targetBlocks {
+		if _, occupied := dm.blockToFile[block]; occupied {
+			return fmt.Errorf("target block %d is already occupied", block)
+		}
+	}
+
+	// Remove current block assignments.
+	for _, block := range currentBlocks {
+		delete(dm.blockToFile, block)
+	}
+
+	// Assign new blocks.
+	for _, block := range targetBlocks {
+		dm.blockToFile[block] = fileID
+	}
+
+	// Update fileBlockIndex.
+	dm.fileBlockIndex[fileID] = targetBlocks
 
 	return nil
 }
