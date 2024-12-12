@@ -1,23 +1,11 @@
 package internal
 
 import (
-	"errors"
 	"fmt"
-	"math/big"
+	"math"
 )
 
-type Stone struct {
-	Value big.Int
-}
-
-func NewStone(value *big.Int) *Stone {
-	return &Stone{Value: *value}
-}
-
-func (s *Stone) ChangeValue(newValue big.Int) *Stone {
-	s.Value = newValue
-	return s
-}
+type Stone = int
 
 // Custom Error type representing an odd-length number
 type OddLengthError struct {
@@ -28,10 +16,12 @@ func (e OddLengthError) Error() string {
 	return fmt.Sprintf("odd length number: %d", e.Length)
 }
 
-func (s *Stone) IsEven() bool {
-	valueStr := s.Value.String()
-	length := len(valueStr)
-	return length%2 == 0
+func CharCount(s Stone) int {
+	return int(math.Log10(float64(s))) + 1
+}
+
+func IsEven(s Stone) bool {
+	return CharCount(s)%2 == 0
 }
 
 // Divide the stone into two equal parts.
@@ -51,31 +41,21 @@ func (s *Stone) IsEven() bool {
 //	Output:
 //	  left:  Stone{value: 123}
 //	  right: Stone{value: 4}
-func (s *Stone) Split() (left, right *Stone, err error) {
-	// Convert the big.Int to a string for easier manipulation.
-	valueStr := s.Value.String()
-	length := len(valueStr)
-	if !s.IsEven() {
-		return nil, nil, OddLengthError{length}
+func Split(s int) (left, right Stone, err error) {
+	if !IsEven(s) {
+		return 0, 0, OddLengthError{CharCount(s)}
 	}
-	halfLength := length / 2
-	leftValue, success := big.NewInt(0).SetString(valueStr[:halfLength], 10)
-	if !success {
-		return nil, nil, errors.New("failed to convert left half of the number")
-	}
-	rightValue, success := big.NewInt(0).SetString(valueStr[halfLength:], 10)
-	if !success {
-		return nil, nil, errors.New("failed to convert right half of the number")
-	}
-	left = NewStone(leftValue)
-	right = NewStone(rightValue)
+	k := CharCount(s) / 2
+	power := int(math.Pow(10, float64(k)))
+	left = s / power
+	right = s % power
 	return
 }
 
 func PrintStones(stones []Stone) {
 	fmt.Printf("Stones(%d): [", len(stones))
 	for i, stone := range stones {
-		fmt.Printf("%s", stone.Value.String())
+		fmt.Printf("%d", stone)
 		if i < len(stones)-1 {
 			fmt.Printf(", ")
 		}

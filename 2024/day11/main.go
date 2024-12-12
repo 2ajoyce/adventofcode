@@ -5,10 +5,10 @@ import (
 	"day11/internal/io"
 	"errors"
 	"fmt"
-	"math/big"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/schollz/progressbar/v3"
 )
@@ -92,61 +92,133 @@ func parseLines(lines []string) (int, []internal.Stone, error) {
 	s = strings.Split(s[1], " ") // Corrected this line to split the string after the colon
 	stones := make([]internal.Stone, len(s))
 	for i, v := range s {
-		vInt, success := new(big.Int).SetString(v, 10)
-		if !success {
-			return -1, nil, errors.New("Invalid stone value: " + v)
+		vInt, err := strconv.Atoi(v)
+		if err != nil {
+			return -1, nil, fmt.Errorf("invalid stone value: %s", v)
 		}
-		stones[i] = *internal.NewStone(vInt)
+		stones[i] = vInt
 	}
 
 	return blink, stones, nil
 }
 
-func solve1(blink int, stones []internal.Stone, parallelism int) ([]string, error) {
-	DEBUG := os.Getenv("DEBUG") == "true"
-	bar := progressbar.Default(int64(blink))
-	fmt.Println("Beginning Solve 1")
-	defer fmt.Println("Ending Solve 1")
-	zero := big.NewInt(0) // Predefined for use in Rule 1
-	one := big.NewInt(1)
-	twentyTwentyFour := big.NewInt(2024) // Used in every iteration of Rule 3
-
-	// For however many blinks were specified
-	for blinkIteration := 0; blinkIteration < blink; blinkIteration++ {
-		bar.Add(1)
-		if DEBUG {
-			fmt.Printf("Blink Iteration %d\n", blinkIteration+1)
-		}
-		// Check each rule against each stone
-		for stoneIndex := 0; stoneIndex < len(stones); stoneIndex++ {
-			if DEBUG {
-				internal.PrintStones(stones)
+// processChunk processes a slice of stones and returns the transformed slice.
+func processChunk(stones []internal.Stone) ([]internal.Stone, error) {
+	localNewStones := make([]internal.Stone, 0, len(stones)*2)
+	for _, stone := range stones {
+		if stone == 0 {
+			localNewStones = append(localNewStones, 1)
+		} else if internal.IsEven(stone) {
+			left, right, err := internal.Split(stone)
+			if err != nil {
+				return nil, err
 			}
-			// Rule 1: Turn 0's into 1's
-			if stones[stoneIndex].Value.Cmp(zero) == 0 {
-				stones[stoneIndex].ChangeValue(*one) // Todo: This may cause a bug, flagging it for inspection later
-				continue
-			}
-			// Rule 2: If the stone number has an even number of digits
-			if stones[stoneIndex].IsEven() {
-				left, right, err := stones[stoneIndex].Split()
-				if err != nil {
-					return nil, err
-				}
-				stones = append(stones[:stoneIndex], append([]internal.Stone{*left, *right}, stones[stoneIndex+1:]...)...)
-				stoneIndex++ // Skip the next stone as we've added two new ones in its place
-				continue
-			}
-			// Rule 3: Multiply the value by 2024
-			newValue := new(big.Int).Mul(&stones[stoneIndex].Value, twentyTwentyFour)
-			stones[stoneIndex].ChangeValue(*newValue)
-		}
-		if DEBUG {
-			internal.PrintStones(stones)
+			localNewStones = append(localNewStones, left, right)
+		} else {
+			localNewStones = append(localNewStones, stone*2024)
 		}
 	}
+	return localNewStones, nil
+}
 
-	results := []string{}
-	results = append(results, fmt.Sprintf("Stones: %d", len(stones)))
-	return results, nil
+func solve1(blink int, stones []internal.Stone, parallelism int) ([]string, error) {
+    DEBUG := os.Getenv("DEBUG") == "true"
+    const maxChunkSize = 100_000
+
+    for blinkIteration := 0; blinkIteration < blink; blinkIteration++ {
+        // Print statement indicating progression of blinks
+        fmt.Printf("Processing Blink %d out of %d\n", blinkIteration+1, blink)
+
+        // Create a new progress bar for this blink iteration
+        bar := progressbar.Default(int64(len(stones)))
+
+        if DEBUG {
+            fmt.Printf("Blink Iteration %d\n", blinkIteration+1)
+        }
+
+        if parallelism <= 1 {
+            // Serial processing
+            newStones, err := processChunk(stones)
+            if err != nil {
+                return nil, err
+            }
+            bar.Add(len(stones))
+            stones = newStones
+        } else {
+            // Parallel processing
+            chunkSize := (len(stones) + parallelism - 1) / parallelism
+            if chunkSize > maxChunkSize {
+                chunkSize = maxChunkSize
+            }
+
+            // Determine the total number of chunks
+            numChunks := (len(stones) + chunkSize - 1) / chunkSize
+
+            // Channels now have enough capacity to hold all results/errors
+            newStonesCh := make(chan []internal.Stone, numChunks)
+            errCh := make(chan error, numChunks)
+
+            var wg sync.WaitGroup
+
+            // Split stones into chunks and process them in parallel
+            for start := 0; start < len(stones); start += chunkSize {
+                end := start + chunkSize
+                if end > len(stones) {
+                    end = len(stones)
+                }
+                chunk := stones[start:end]
+
+                wg.Add(1)
+                go func(ch []internal.Stone) {
+                    defer wg.Done()
+                    res, err := processChunk(ch)
+                    if err != nil {
+                        // Try to send the error, if no room, just return
+                        select {
+                        case errCh <- err:
+                        default: // In case buffer is full (unlikely)
+                        }
+                        return
+                    }
+
+                    // Attempt to send results
+                    // This will not block because the channel is large enough
+                    // to hold all chunks' results.
+                    newStonesCh <- res
+                    // Update progress bar for this chunk
+                    bar.Add(len(ch))
+                }(chunk)
+            }
+
+            // Wait for all goroutines to finish
+            wg.Wait()
+            close(newStonesCh)
+            close(errCh)
+
+            // Check if there were any errors
+            select {
+            case err := <-errCh:
+                if err != nil {
+                    return nil, err
+                }
+            default:
+                // No error
+            }
+
+            // Combine results from the channel
+            newStones := make([]internal.Stone, 0, len(stones)*2)
+            for res := range newStonesCh {
+                newStones = append(newStones, res...)
+            }
+
+            stones = newStones
+        }
+
+        if DEBUG {
+            internal.PrintStones(stones)
+        }
+    }
+
+    results := []string{fmt.Sprintf("Stones: %d", len(stones))}
+    return results, nil
 }
