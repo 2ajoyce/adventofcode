@@ -14,8 +14,6 @@ import (
 	"time"
 
 	"github.com/gosuri/uilive"
-
-	"github.com/schollz/progressbar/v3"
 )
 
 func main() {
@@ -142,24 +140,13 @@ func solve1(blink int, stones []internal.Stone, parallelism int) ([]string, erro
 	// Initialize RunningTotal as a big.Int to handle large counts
 	runningTotal := big.NewInt(0)
 
-	// Initialize Progress Bar
-	bar := progressbar.NewOptions64(
-		0, // Initial count
-		progressbar.OptionSetDescription("Processing stones"),
-		progressbar.OptionSetWriter(os.Stdout),
-		progressbar.OptionShowCount(),
-		progressbar.OptionSetWidth(40),
-		progressbar.OptionSetPredictTime(false),
-		progressbar.OptionClearOnFinish(),
-	)
-
 	// Initialize uilive writer
 	writer := uilive.New()
 	writer.Start()
 	defer writer.Stop()
 
 	// Define how often to log status (e.g., every 1,000,000 stones)
-	const statusInterval = 5000
+	const statusInterval = 5_000_000
 	processedStones := int64(0)
 	startTime := time.Now()
 
@@ -169,7 +156,6 @@ func solve1(blink int, stones []internal.Stone, parallelism int) ([]string, erro
 	go func() {
 		<-sigChan
 		fmt.Fprintf(writer, "\nInterrupt received, shutting down...\n")
-		bar.Finish()
 		writer.Stop()
 		os.Exit(1)
 	}()
@@ -203,7 +189,7 @@ func solve1(blink int, stones []internal.Stone, parallelism int) ([]string, erro
 		}
 
 		if DEBUG {
-			fmt.Printf("Comparing deepest=%d with blink=%d\n", deepest, blink)
+			fmt.Fprintf(writer, "Comparing deepest=%d with blink=%d\n", deepest, blink)
 		}
 
 		// Process the first unprocessed stone in the deepest queue
@@ -218,7 +204,6 @@ func solve1(blink int, stones []internal.Stone, parallelism int) ([]string, erro
 		transformed, err := processChunk(currentStone)
 		if err != nil {
 			fmt.Fprintf(writer, "\nError processing stone %d at depth %d: %v\n", currentStone, deepest, err)
-			bar.Finish()
 			writer.Stop()
 			return nil, err
 		}
@@ -238,20 +223,17 @@ func solve1(blink int, stones []internal.Stone, parallelism int) ([]string, erro
 			processedStones++
 		}
 
-		// Update Progress Bar
-		bar.Add64(1)
-
 		// Periodic Status Updates
 		if processedStones%statusInterval == 0 {
 			// Write to uilive writer
-			fmt.Fprintf(writer, "\nStatus Update:\n")
-			fmt.Fprintf(writer, "  Total Processed Stones: %d\n", processedStones)
-			fmt.Fprintf(writer, "  RunningTotal: %s\n", runningTotal.String())
-			fmt.Fprintf(writer, "  Stones in Queues:\n")
+			status := fmt.Sprintf(
+				"Status Update:\n  Total Processed Stones: %d\n  RunningTotal: %s\n  Stones in Queues:\n",
+				processedStones, runningTotal.String(),
+			)
 			for d := 0; d <= blink; d++ {
 				remaining := len(queues[d]) - indices[d]
 				if remaining <= 0 {
-					fmt.Fprintf(writer, "    Depth %d: 0 stones remaining\n", d)
+					status += fmt.Sprintf("    Depth %d: 0 stones remaining\n", d)
 					continue
 				}
 
@@ -270,10 +252,13 @@ func solve1(blink int, stones []internal.Stone, parallelism int) ([]string, erro
 					stoneStrs[i] = strconv.Itoa(int(stone))
 				}
 
-				fmt.Fprintf(writer, "    Depth %d: %d stones remaining | First %d stones: [%s]\n",
-					d, remaining, displayCount, strings.Join(stoneStrs, ", "))
+				status += fmt.Sprintf(
+					"    Depth %d: %d stones remaining | First %d stones: [%s]\n",
+					d, remaining, displayCount, strings.Join(stoneStrs, ", "),
+				)
 			}
-			fmt.Fprintf(writer, "  Time Elapsed: %s\n\n", time.Since(startTime))
+			status += fmt.Sprintf("  Time Elapsed: %s\n\n", time.Since(startTime))
+			fmt.Fprint(writer, status)
 		}
 
 		// Pruning Logic
@@ -285,14 +270,12 @@ func solve1(blink int, stones []internal.Stone, parallelism int) ([]string, erro
 		}
 	}
 
-	// Finish the progress bar
-	bar.Finish()
-
 	// Final Status Update
-	fmt.Fprintf(writer, "\nFinal Status:\n")
-	fmt.Fprintf(writer, "  Total Processed Stones: %d\n", processedStones)
-	fmt.Fprintf(writer, "  RunningTotal: %s\n", runningTotal.String())
-	fmt.Fprintf(writer, "  Time Elapsed: %s\n\n", time.Since(startTime))
+	finalStatus := fmt.Sprintf(
+		"\nFinal Status:\n  Total Processed Stones: %d\n  RunningTotal: %s\n  Time Elapsed: %s\n\n",
+		processedStones, runningTotal.String(), time.Since(startTime),
+	)
+	fmt.Fprint(writer, finalStatus)
 
 	// After processing all stones, prepare the result
 	results := []string{fmt.Sprintf("Stones: %s", runningTotal.String())}
