@@ -105,30 +105,35 @@ func parseLines(lines []string) (int, []internal.Stone, error) {
 	return blink, stones, nil
 }
 
-// processChunk processes a single stone and returns the transformed slice.
-func processChunk(stone internal.Stone) ([]internal.Stone, error) {
-	localNewStones := make([]internal.Stone, 0, 2) // Max two stones after transformation
-	if stone == 0 {
-		localNewStones = append(localNewStones, 1)
-	} else if internal.IsEven(stone) {
-		left, right, err := internal.Split(stone)
-		if err != nil {
-			return nil, err
-		}
-		localNewStones = append(localNewStones, left, right)
-	} else {
-		localNewStones = append(localNewStones, stone*2024)
-	}
-	return localNewStones, nil
-}
+// processChunk processes a slice of stones and returns the transformed slice.
+func processChunk(stones []internal.Stone) ([]internal.Stone, error) {
+	// Initialize a slice to hold all transformed stones.
+	// Assuming each stone can produce up to 2 new stones, preallocate for efficiency.
+	transformed := make([]internal.Stone, 0, len(stones)*2)
 
+	for _, stone := range stones {
+		if stone == 0 {
+			transformed = append(transformed, 1)
+		} else if internal.IsEven(stone) {
+			left, right, err := internal.Split(stone)
+			if err != nil {
+				return nil, err
+			}
+			transformed = append(transformed, left, right)
+		} else {
+			transformed = append(transformed, stone*2024)
+		}
+	}
+
+	return transformed, nil
+}
 func solve1(blink int, stones []internal.Stone, parallelism int) ([]string, error) {
 	DEBUG := os.Getenv("DEBUG") == "true"
-	const maxChunkSize = 100_000
+	const maxChunkSize = 5_000_000
 
 	// Define how many stones to display from each queue
 	const displayStones = 5
-	const maxPruneThreshold = 100_000
+	const maxPruneThreshold = 500_000_000
 
 	// Initialize queues for each depth (0 to blink)
 	queues := make([][]internal.Stone, blink+1)
@@ -147,6 +152,7 @@ func solve1(blink int, stones []internal.Stone, parallelism int) ([]string, erro
 
 	// Define how often to log status (e.g., every 1,000,000 stones)
 	const statusInterval = 5_000_000
+	nextStatusUpdate := int64(statusInterval)
 	processedStones := int64(0)
 	startTime := time.Now()
 
@@ -160,7 +166,7 @@ func solve1(blink int, stones []internal.Stone, parallelism int) ([]string, erro
 		os.Exit(1)
 	}()
 
-	// Helper function to ensure queues has enough capacity
+	// Helper function to ensure queues have enough capacity
 	ensureCapacity := func(queues [][]internal.Stone, index int) [][]internal.Stone {
 		if index < len(queues) {
 			return queues
@@ -176,7 +182,7 @@ func solve1(blink int, stones []internal.Stone, parallelism int) ([]string, erro
 	for {
 		// Find the deepest non-empty queue
 		deepest := -1
-		for d := blink; d >= 0; d-- { // Ensure deepest starts at -1
+		for d := blink; d >= 0; d-- {
 			if indices[d] < len(queues[d]) {
 				deepest = d
 				break
@@ -192,39 +198,52 @@ func solve1(blink int, stones []internal.Stone, parallelism int) ([]string, erro
 			fmt.Fprintf(writer, "Comparing deepest=%d with blink=%d\n", deepest, blink)
 		}
 
-		// Process the first unprocessed stone in the deepest queue
-		currentStone := queues[deepest][indices[deepest]]
-		indices[deepest]++ // Mark this stone as processed
-
-		if DEBUG {
-			fmt.Fprintf(writer, "Processing stone %d from queue[%d]\n", currentStone, deepest)
+		// Determine how many stones to process in this chunk
+		remainingStones := len(queues[deepest]) - indices[deepest]
+		chunkSize := maxChunkSize
+		if remainingStones < maxChunkSize {
+			chunkSize = remainingStones
 		}
 
-		// Transform the stone using the updated processChunk
-		transformed, err := processChunk(currentStone)
-		if err != nil {
-			fmt.Fprintf(writer, "\nError processing stone %d at depth %d: %v\n", currentStone, deepest, err)
-			writer.Stop()
-			return nil, err
-		}
-
-		// Determine the next depth
-		nextDepth := deepest + 1
-
-		// Ensure queues has enough capacity
-		queues = ensureCapacity(queues, nextDepth)
+		// Get the chunk of stones to process
+		stonesToProcess := queues[deepest][indices[deepest] : indices[deepest]+chunkSize]
+		indices[deepest] += chunkSize // Mark these stones as processed
 
 		if deepest == blink {
-			// If next depth exceeds the maximum blink, count the stones
-			runningTotal.Add(runningTotal, big.NewInt(int64(1)))
+			// **COUNTING WITHOUT PROCESSING**
+			// Add the number of stones in this chunk directly to runningTotal
+			runningTotal.Add(runningTotal, big.NewInt(int64(chunkSize)))
+			processedStones += int64(chunkSize)
+
+			if DEBUG {
+				fmt.Fprintf(writer, "Counting %d stones from queue[%d] without processing\n", chunkSize, deepest)
+			}
 		} else {
+			if DEBUG {
+				fmt.Fprintf(writer, "Processing %d stones from queue[%d]\n", chunkSize, deepest)
+			}
+
+			// Transform the stones using the updated processChunk
+			transformedStones, err := processChunk(stonesToProcess)
+			if err != nil {
+				fmt.Fprintf(writer, "\nError processing stones at depth %d: %v\n", deepest, err)
+				writer.Stop()
+				return nil, err
+			}
+
+			// Determine the next depth
+			nextDepth := deepest + 1
+
+			// Ensure queues have enough capacity
+			queues = ensureCapacity(queues, nextDepth)
+
 			// Add the transformed stones to the next depth queue
-			queues[nextDepth] = append(queues[nextDepth], transformed...)
-			processedStones++
+			queues[nextDepth] = append(queues[nextDepth], transformedStones...)
+			processedStones += int64(chunkSize)
 		}
 
 		// Periodic Status Updates
-		if processedStones%statusInterval == 0 {
+		if processedStones >= nextStatusUpdate {
 			// Write to uilive writer
 			status := fmt.Sprintf(
 				"Status Update:\n  Total Processed Stones: %d\n  RunningTotal: %s\n  Stones in Queues:\n",
@@ -259,6 +278,9 @@ func solve1(blink int, stones []internal.Stone, parallelism int) ([]string, erro
 			}
 			status += fmt.Sprintf("  Time Elapsed: %s\n\n", time.Since(startTime))
 			fmt.Fprint(writer, status)
+
+			// Update the nextStatusUpdate
+			nextStatusUpdate += statusInterval
 		}
 
 		// Pruning Logic
