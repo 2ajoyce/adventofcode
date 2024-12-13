@@ -2,13 +2,18 @@ package main
 
 import (
 	"day11/internal"
-	"day11/internal/io"
+	"day11/internal/aocIo"
 	"errors"
 	"fmt"
+	"math/big"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
-	"sync"
+	"syscall"
+	"time"
+
+	"github.com/gosuri/uilive"
 
 	"github.com/schollz/progressbar/v3"
 )
@@ -39,7 +44,7 @@ func main() {
 	// READ INPUT FILE
 	////////////////////////////////////////////////////////////////////
 
-	lines, err := io.ReadInput(INPUT_FILE)
+	lines, err := aocIo.ReadInput(INPUT_FILE)
 	if err != nil {
 		fmt.Printf("Error reading from %s: %v", INPUT_FILE, err)
 		return
@@ -64,7 +69,7 @@ func main() {
 	// WRITE OUTPUT FILE
 	////////////////////////////////////////////////////////////////////
 
-	err = io.WriteOutput(OUTPUT_FILE, results)
+	err = aocIo.WriteOutput(OUTPUT_FILE, results)
 	if err != nil {
 		fmt.Printf("Error writing to %s: %v", OUTPUT_FILE, err)
 		return
@@ -102,123 +107,194 @@ func parseLines(lines []string) (int, []internal.Stone, error) {
 	return blink, stones, nil
 }
 
-// processChunk processes a slice of stones and returns the transformed slice.
-func processChunk(stones []internal.Stone) ([]internal.Stone, error) {
-	localNewStones := make([]internal.Stone, 0, len(stones)*2)
-	for _, stone := range stones {
-		if stone == 0 {
-			localNewStones = append(localNewStones, 1)
-		} else if internal.IsEven(stone) {
-			left, right, err := internal.Split(stone)
-			if err != nil {
-				return nil, err
-			}
-			localNewStones = append(localNewStones, left, right)
-		} else {
-			localNewStones = append(localNewStones, stone*2024)
+// processChunk processes a single stone and returns the transformed slice.
+func processChunk(stone internal.Stone) ([]internal.Stone, error) {
+	localNewStones := make([]internal.Stone, 0, 2) // Max two stones after transformation
+	if stone == 0 {
+		localNewStones = append(localNewStones, 1)
+	} else if internal.IsEven(stone) {
+		left, right, err := internal.Split(stone)
+		if err != nil {
+			return nil, err
 		}
+		localNewStones = append(localNewStones, left, right)
+	} else {
+		localNewStones = append(localNewStones, stone*2024)
 	}
 	return localNewStones, nil
 }
 
 func solve1(blink int, stones []internal.Stone, parallelism int) ([]string, error) {
-    DEBUG := os.Getenv("DEBUG") == "true"
-    const maxChunkSize = 100_000
+	DEBUG := os.Getenv("DEBUG") == "true"
+	const maxChunkSize = 100_000
 
-    for blinkIteration := 0; blinkIteration < blink; blinkIteration++ {
-        // Print statement indicating progression of blinks
-        fmt.Printf("Processing Blink %d out of %d\n", blinkIteration+1, blink)
+	// Define how many stones to display from each queue
+	const displayStones = 5
+	const maxPruneThreshold = 100_000
 
-        // Create a new progress bar for this blink iteration
-        bar := progressbar.Default(int64(len(stones)))
+	// Initialize queues for each depth (0 to blink)
+	queues := make([][]internal.Stone, blink+1)
+	queues[0] = stones
 
-        if DEBUG {
-            fmt.Printf("Blink Iteration %d\n", blinkIteration+1)
-        }
+	// Initialize indices to track the next stone to process in each queue
+	indices := make([]int, blink+1) // Corrected length
 
-        if parallelism <= 1 {
-            // Serial processing
-            newStones, err := processChunk(stones)
-            if err != nil {
-                return nil, err
-            }
-            bar.Add(len(stones))
-            stones = newStones
-        } else {
-            // Parallel processing
-            chunkSize := (len(stones) + parallelism - 1) / parallelism
-            if chunkSize > maxChunkSize {
-                chunkSize = maxChunkSize
-            }
+	// Initialize RunningTotal as a big.Int to handle large counts
+	runningTotal := big.NewInt(0)
 
-            // Determine the total number of chunks
-            numChunks := (len(stones) + chunkSize - 1) / chunkSize
+	// Initialize Progress Bar
+	bar := progressbar.NewOptions64(
+		0, // Initial count
+		progressbar.OptionSetDescription("Processing stones"),
+		progressbar.OptionSetWriter(os.Stdout),
+		progressbar.OptionShowCount(),
+		progressbar.OptionSetWidth(40),
+		progressbar.OptionSetPredictTime(false),
+		progressbar.OptionClearOnFinish(),
+	)
 
-            // Channels now have enough capacity to hold all results/errors
-            newStonesCh := make(chan []internal.Stone, numChunks)
-            errCh := make(chan error, numChunks)
+	// Initialize uilive writer
+	writer := uilive.New()
+	writer.Start()
+	defer writer.Stop()
 
-            var wg sync.WaitGroup
+	// Define how often to log status (e.g., every 1,000,000 stones)
+	const statusInterval = 5000
+	processedStones := int64(0)
+	startTime := time.Now()
 
-            // Split stones into chunks and process them in parallel
-            for start := 0; start < len(stones); start += chunkSize {
-                end := start + chunkSize
-                if end > len(stones) {
-                    end = len(stones)
-                }
-                chunk := stones[start:end]
+	// Setup signal handling for graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		fmt.Fprintf(writer, "\nInterrupt received, shutting down...\n")
+		bar.Finish()
+		writer.Stop()
+		os.Exit(1)
+	}()
 
-                wg.Add(1)
-                go func(ch []internal.Stone) {
-                    defer wg.Done()
-                    res, err := processChunk(ch)
-                    if err != nil {
-                        // Try to send the error, if no room, just return
-                        select {
-                        case errCh <- err:
-                        default: // In case buffer is full (unlikely)
-                        }
-                        return
-                    }
+	// Helper function to ensure queues has enough capacity
+	ensureCapacity := func(queues [][]internal.Stone, index int) [][]internal.Stone {
+		if index < len(queues) {
+			return queues
+		}
+		newLength := len(queues) * 2
+		if newLength <= index {
+			newLength = index + 1
+		}
+		return append(queues, make([][]internal.Stone, newLength-len(queues))...)
+	}
 
-                    // Attempt to send results
-                    // This will not block because the channel is large enough
-                    // to hold all chunks' results.
-                    newStonesCh <- res
-                    // Update progress bar for this chunk
-                    bar.Add(len(ch))
-                }(chunk)
-            }
+	// Processing loop
+	for {
+		// Find the deepest non-empty queue
+		deepest := -1
+		for d := blink; d >= 0; d-- { // Ensure deepest starts at -1
+			if indices[d] < len(queues[d]) {
+				deepest = d
+				break
+			}
+		}
 
-            // Wait for all goroutines to finish
-            wg.Wait()
-            close(newStonesCh)
-            close(errCh)
+		// If no queues have stones left to process, break the loop
+		if deepest == -1 {
+			break
+		}
 
-            // Check if there were any errors
-            select {
-            case err := <-errCh:
-                if err != nil {
-                    return nil, err
-                }
-            default:
-                // No error
-            }
+		if DEBUG {
+			fmt.Printf("Comparing deepest=%d with blink=%d\n", deepest, blink)
+		}
 
-            // Combine results from the channel
-            newStones := make([]internal.Stone, 0, len(stones)*2)
-            for res := range newStonesCh {
-                newStones = append(newStones, res...)
-            }
+		// Process the first unprocessed stone in the deepest queue
+		currentStone := queues[deepest][indices[deepest]]
+		indices[deepest]++ // Mark this stone as processed
 
-            stones = newStones
-        }
+		if DEBUG {
+			fmt.Fprintf(writer, "Processing stone %d from queue[%d]\n", currentStone, deepest)
+		}
 
-        if DEBUG {
-            internal.PrintStones(stones)
-        }
-    }
+		// Transform the stone using the updated processChunk
+		transformed, err := processChunk(currentStone)
+		if err != nil {
+			fmt.Fprintf(writer, "\nError processing stone %d at depth %d: %v\n", currentStone, deepest, err)
+			bar.Finish()
+			writer.Stop()
+			return nil, err
+		}
 
-    results := []string{fmt.Sprintf("Stones: %d", len(stones))}
-    return results, nil
+		// Determine the next depth
+		nextDepth := deepest + 1
+
+		// Ensure queues has enough capacity
+		queues = ensureCapacity(queues, nextDepth)
+
+		if deepest == blink {
+			// If next depth exceeds the maximum blink, count the stones
+			runningTotal.Add(runningTotal, big.NewInt(int64(1)))
+		} else {
+			// Add the transformed stones to the next depth queue
+			queues[nextDepth] = append(queues[nextDepth], transformed...)
+			processedStones++
+		}
+
+		// Update Progress Bar
+		bar.Add64(1)
+
+		// Periodic Status Updates
+		if processedStones%statusInterval == 0 {
+			// Write to uilive writer
+			fmt.Fprintf(writer, "\nStatus Update:\n")
+			fmt.Fprintf(writer, "  Total Processed Stones: %d\n", processedStones)
+			fmt.Fprintf(writer, "  RunningTotal: %s\n", runningTotal.String())
+			fmt.Fprintf(writer, "  Stones in Queues:\n")
+			for d := 0; d <= blink; d++ {
+				remaining := len(queues[d]) - indices[d]
+				if remaining <= 0 {
+					fmt.Fprintf(writer, "    Depth %d: 0 stones remaining\n", d)
+					continue
+				}
+
+				// Determine the number of stones to display (min(displayStones, remaining))
+				displayCount := displayStones
+				if remaining < displayStones {
+					displayCount = remaining
+				}
+
+				// Slice to get the first N stones
+				firstNStones := queues[d][indices[d] : indices[d]+displayCount]
+
+				// Format stones for display
+				stoneStrs := make([]string, len(firstNStones))
+				for i, stone := range firstNStones {
+					stoneStrs[i] = strconv.Itoa(int(stone))
+				}
+
+				fmt.Fprintf(writer, "    Depth %d: %d stones remaining | First %d stones: [%s]\n",
+					d, remaining, displayCount, strings.Join(stoneStrs, ", "))
+			}
+			fmt.Fprintf(writer, "  Time Elapsed: %s\n\n", time.Since(startTime))
+		}
+
+		// Pruning Logic
+		if indices[deepest] >= maxPruneThreshold {
+			// Prune the processed stones from the queue
+			queues[deepest] = queues[deepest][indices[deepest]:]
+			// Reset the index for this queue
+			indices[deepest] = 0
+		}
+	}
+
+	// Finish the progress bar
+	bar.Finish()
+
+	// Final Status Update
+	fmt.Fprintf(writer, "\nFinal Status:\n")
+	fmt.Fprintf(writer, "  Total Processed Stones: %d\n", processedStones)
+	fmt.Fprintf(writer, "  RunningTotal: %s\n", runningTotal.String())
+	fmt.Fprintf(writer, "  Time Elapsed: %s\n\n", time.Since(startTime))
+
+	// After processing all stones, prepare the result
+	results := []string{fmt.Sprintf("Stones: %s", runningTotal.String())}
+	return results, nil
 }
