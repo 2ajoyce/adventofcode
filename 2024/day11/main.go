@@ -80,11 +80,18 @@ func parseLines(lines []string) (int, []internal.Stone, error) {
 	//DEBUG := os.Getenv("DEBUG") == "true"
 	fmt.Println("Parsing Input...")
 
+	if len(lines) == 0 {
+		return -1, nil, errors.New("input is empty")
+	}
+
 	input := lines[0] // There is only one line of input
 	// Input will be in the form "1:23 45"
 	// 1 indicates the number of times to blink
 	// There are two stones with values 23 and 45
 	s := strings.Split(input, ":")
+	if len(s) != 2 {
+		return -1, nil, errors.New("input format invalid, expected 'blink:stone1 stone2 ...'")
+	}
 	b := s[0]
 	blink, err := strconv.Atoi(b)
 	if err != nil {
@@ -92,55 +99,46 @@ func parseLines(lines []string) (int, []internal.Stone, error) {
 	}
 
 	// Build Stones array
-	s = strings.Split(s[1], " ") // Corrected this line to split the string after the colon
-	stones := make([]internal.Stone, len(s))
-	for i, v := range s {
+	s = strings.Split(s[1], " ") // Split the string after the colon
+	stones := make([]internal.Stone, 0, len(s))
+	for _, v := range s {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			continue
+		}
 		vInt, err := strconv.Atoi(v)
 		if err != nil {
 			return -1, nil, fmt.Errorf("invalid stone value: %s", v)
 		}
-		stones[i] = vInt
+		stones = append(stones, internal.Stone(vInt))
 	}
 
 	return blink, stones, nil
 }
 
-// processChunk processes a slice of stones and returns the transformed slice.
-func processChunk(stones []internal.Stone) ([]internal.Stone, error) {
-	// Initialize a slice to hold all transformed stones.
-	// Assuming each stone can produce up to 2 new stones, preallocate for efficiency.
-	transformed := make([]internal.Stone, 0, len(stones)*2)
+// processChunk processes a single stone and returns the transformed stones.
+func processStone(stone internal.Stone) ([]internal.Stone, error) {
+	transformed := []internal.Stone{}
 
-	for _, stone := range stones {
-		if stone == 0 {
-			transformed = append(transformed, 1)
-		} else if internal.IsEven(stone) {
-			left, right, err := internal.Split(stone)
-			if err != nil {
-				return nil, err
-			}
-			transformed = append(transformed, left, right)
-		} else {
-			transformed = append(transformed, stone*2024)
+	if stone == 0 {
+		transformed = append(transformed, 1)
+	} else if internal.IsEven(int(stone)) {
+		left, right, err := internal.Split(int(stone))
+		if err != nil {
+			return nil, err
 		}
+		transformed = append(transformed, internal.Stone(left), internal.Stone(right))
+	} else {
+		// Assuming that for odd stones, stone*2024 is the new stone value
+		transformed = append(transformed, internal.Stone(int(stone)*2024))
 	}
 
 	return transformed, nil
 }
+
 func solve1(blink int, stones []internal.Stone, parallelism int) ([]string, error) {
-	DEBUG := os.Getenv("DEBUG") == "true"
+	//DEBUG := os.Getenv("DEBUG") == "true"
 	const maxChunkSize = 5_000_000
-
-	// Define how many stones to display from each queue
-	const displayStones = 5
-	const maxPruneThreshold = 500_000_000
-
-	// Initialize queues for each depth (0 to blink)
-	queues := make([][]internal.Stone, blink+1)
-	queues[0] = stones
-
-	// Initialize indices to track the next stone to process in each queue
-	indices := make([]int, blink+1) // Corrected length
 
 	// Initialize RunningTotal as a big.Int to handle large counts
 	runningTotal := big.NewInt(0)
@@ -150,7 +148,7 @@ func solve1(blink int, stones []internal.Stone, parallelism int) ([]string, erro
 	writer.Start()
 	defer writer.Stop()
 
-	// Define how often to log status (e.g., every 1,000,000 stones)
+	// Define how often to log status (e.g., every 5,000,000 stones)
 	const statusInterval = 5_000_000
 	nextStatusUpdate := int64(statusInterval)
 	processedStones := int64(0)
@@ -166,129 +164,72 @@ func solve1(blink int, stones []internal.Stone, parallelism int) ([]string, erro
 		os.Exit(1)
 	}()
 
-	// Helper function to ensure queues have enough capacity
-	ensureCapacity := func(queues [][]internal.Stone, index int) [][]internal.Stone {
-		if index < len(queues) {
-			return queues
+	// Initialize the memoization cache: map[stone][depth] = count
+	cache := make(map[int]map[int]int)
+
+	// Helper function to get count from cache or compute it
+	var getStoneCount func(stone internal.Stone, depth int) (int, error)
+	getStoneCount = func(stone internal.Stone, depth int) (int, error) {
+		// Base case: if depth == blink, this stone counts as 1
+		if depth == blink {
+			return 1, nil
 		}
-		newLength := len(queues) * 2
-		if newLength <= index {
-			newLength = index + 1
+
+		// Initialize inner map if not present
+		if cache[int(stone)] == nil {
+			cache[int(stone)] = make(map[int]int)
 		}
-		return append(queues, make([][]internal.Stone, newLength-len(queues))...)
+
+		// Check if the count is already cached
+		if count, exists := cache[int(stone)][depth]; exists {
+			return count, nil
+		}
+
+		// Process the stone to get transformed stones
+		transformedStones, err := processStone(stone)
+		if err != nil {
+			return 0, err
+		}
+
+		// Initialize count for this stone at this depth
+		total := 0
+
+		for _, newStone := range transformedStones {
+			count, err := getStoneCount(newStone, depth+1)
+			if err != nil {
+				return 0, err
+			}
+			total += count
+		}
+
+		// Cache the computed count
+		cache[int(stone)][depth] = total
+
+		return total, nil
 	}
 
-	// Processing loop
-	for {
-		// Find the deepest non-empty queue
-		deepest := -1
-		for d := blink; d >= 0; d-- {
-			if indices[d] < len(queues[d]) {
-				deepest = d
-				break
-			}
+	// Process each initial stone
+	for _, stone := range stones {
+		count, err := getStoneCount(stone, 0)
+		if err != nil {
+			fmt.Fprintf(writer, "\nError processing stone %d: %v\n", stone, err)
+			writer.Stop()
+			return nil, err
 		}
-
-		// If no queues have stones left to process, break the loop
-		if deepest == -1 {
-			break
-		}
-
-		if DEBUG {
-			fmt.Fprintf(writer, "Comparing deepest=%d with blink=%d\n", deepest, blink)
-		}
-
-		// Determine how many stones to process in this chunk
-		remainingStones := len(queues[deepest]) - indices[deepest]
-		chunkSize := maxChunkSize
-		if remainingStones < maxChunkSize {
-			chunkSize = remainingStones
-		}
-
-		// Get the chunk of stones to process
-		stonesToProcess := queues[deepest][indices[deepest] : indices[deepest]+chunkSize]
-		indices[deepest] += chunkSize // Mark these stones as processed
-
-		if deepest == blink {
-			// **COUNTING WITHOUT PROCESSING**
-			// Add the number of stones in this chunk directly to runningTotal
-			runningTotal.Add(runningTotal, big.NewInt(int64(chunkSize)))
-			processedStones += int64(chunkSize)
-
-			if DEBUG {
-				fmt.Fprintf(writer, "Counting %d stones from queue[%d] without processing\n", chunkSize, deepest)
-			}
-		} else {
-			if DEBUG {
-				fmt.Fprintf(writer, "Processing %d stones from queue[%d]\n", chunkSize, deepest)
-			}
-
-			// Transform the stones using the updated processChunk
-			transformedStones, err := processChunk(stonesToProcess)
-			if err != nil {
-				fmt.Fprintf(writer, "\nError processing stones at depth %d: %v\n", deepest, err)
-				writer.Stop()
-				return nil, err
-			}
-
-			// Determine the next depth
-			nextDepth := deepest + 1
-
-			// Ensure queues have enough capacity
-			queues = ensureCapacity(queues, nextDepth)
-
-			// Add the transformed stones to the next depth queue
-			queues[nextDepth] = append(queues[nextDepth], transformedStones...)
-			processedStones += int64(chunkSize)
-		}
+		runningTotal.Add(runningTotal, big.NewInt(int64(count)))
+		processedStones += 1
 
 		// Periodic Status Updates
 		if processedStones >= nextStatusUpdate {
 			// Write to uilive writer
 			status := fmt.Sprintf(
-				"Status Update:\n  Total Processed Stones: %d\n  RunningTotal: %s\n  Stones in Queues:\n",
-				processedStones, runningTotal.String(),
+				"Status Update:\n  Total Processed Stones: %d\n  RunningTotal: %s\n  Time Elapsed: %s\n\n",
+				processedStones, runningTotal.String(), time.Since(startTime),
 			)
-			for d := 0; d <= blink; d++ {
-				remaining := len(queues[d]) - indices[d]
-				if remaining <= 0 {
-					status += fmt.Sprintf("    Depth %d: 0 stones remaining\n", d)
-					continue
-				}
-
-				// Determine the number of stones to display (min(displayStones, remaining))
-				displayCount := displayStones
-				if remaining < displayStones {
-					displayCount = remaining
-				}
-
-				// Slice to get the first N stones
-				firstNStones := queues[d][indices[d] : indices[d]+displayCount]
-
-				// Format stones for display
-				stoneStrs := make([]string, len(firstNStones))
-				for i, stone := range firstNStones {
-					stoneStrs[i] = strconv.Itoa(int(stone))
-				}
-
-				status += fmt.Sprintf(
-					"    Depth %d: %d stones remaining | First %d stones: [%s]\n",
-					d, remaining, displayCount, strings.Join(stoneStrs, ", "),
-				)
-			}
-			status += fmt.Sprintf("  Time Elapsed: %s\n\n", time.Since(startTime))
 			fmt.Fprint(writer, status)
 
 			// Update the nextStatusUpdate
 			nextStatusUpdate += statusInterval
-		}
-
-		// Pruning Logic
-		if indices[deepest] >= maxPruneThreshold {
-			// Prune the processed stones from the queue
-			queues[deepest] = queues[deepest][indices[deepest]:]
-			// Reset the index for this queue
-			indices[deepest] = 0
 		}
 	}
 
@@ -299,7 +240,7 @@ func solve1(blink int, stones []internal.Stone, parallelism int) ([]string, erro
 	)
 	fmt.Fprint(writer, finalStatus)
 
-	// After processing all stones, prepare the result
+	// Prepare the result
 	results := []string{fmt.Sprintf("Stones: %s", runningTotal.String())}
 	return results, nil
 }
