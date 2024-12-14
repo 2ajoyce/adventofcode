@@ -22,7 +22,7 @@ func (e CellEmptyError) Error() string {
 /////////////////////////////////////////////////////////////////////////////////////
 
 type SpatialMapCell interface {
-	GetEntityIds() ([]uuid.UUID)
+	GetEntityIds() []uuid.UUID
 	AddEntityId(entityId uuid.UUID) (bool, error)
 	RemoveEntityId(entityId uuid.UUID) (bool, error)
 }
@@ -38,7 +38,7 @@ func NewSpatialMapCell() SpatialMapCell {
 	return c
 }
 
-func (c *spatialMapCell) GetEntityIds() ([]uuid.UUID) {
+func (c *spatialMapCell) GetEntityIds() []uuid.UUID {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	// Return a copy to prevent external modification
@@ -156,17 +156,17 @@ func (m *spatialMap) removeEntity(x, y int, entityId uuid.UUID) (bool, error) {
 type Entity interface {
 	GetId() uuid.UUID
 	GetPosition() (x int, y int)
-	GetVelocity() (xv float64, yv float64)
-	setPosition(x, y int)       // Mutation functions are private
-	setVelocity(xv, yv float64) // Mutation functions are private
+	GetVelocity() (xv int, yv int)
+	setPosition(x, y int)   // Mutation functions are private
+	setVelocity(xv, yv int) // Mutation functions are private
 }
 
 type entity struct {
 	id uuid.UUID
 	x  int
 	y  int
-	xv float64
-	yv float64
+	xv int
+	yv int
 }
 
 func NewEntity() (Entity, error) {
@@ -195,13 +195,13 @@ func (e *entity) setPosition(x, y int) {
 	return
 }
 
-func (e *entity) GetVelocity() (xv float64, yv float64) {
+func (e *entity) GetVelocity() (xv int, yv int) {
 	xv = e.xv
 	yv = e.yv
 	return
 }
 
-func (e *entity) setVelocity(xv, yv float64) {
+func (e *entity) setVelocity(xv, yv int) {
 	e.xv = xv
 	e.yv = yv
 }
@@ -211,7 +211,7 @@ func (e *entity) setVelocity(xv, yv float64) {
 /////////////////////////////////////////////////////////////////////////////////////
 
 type Simulation interface {
-	AddEntity(e Entity, x, y int, xv, yv float64) (Entity, error)
+	AddEntity(e Entity, x, y int, xv, yv int) (Entity, error)
 	GetEntity(entityId uuid.UUID) (Entity, error)
 	GetEntities() []Entity
 	MoveEntity(entityId uuid.UUID, newX, newY int) (bool, error)
@@ -256,7 +256,7 @@ func (s *simulation) GetEntities() []Entity {
 	return entitiesCopy
 }
 
-func (s *simulation) AddEntity(e Entity, x, y int, xv, yv float64) (Entity, error) {
+func (s *simulation) AddEntity(e Entity, x, y int, xv, yv int) (Entity, error) {
 	// Lock the mutex to ensure thread safety when adding entities
 	s.updateMutex.Lock()
 	defer s.updateMutex.Unlock()
@@ -323,8 +323,16 @@ func (s *simulation) MoveEntity(entityId uuid.UUID, newX, newY int) (bool, error
 	s.updateMutex.Lock()
 	defer s.updateMutex.Unlock()
 
+	// Get the map's dimensions
+	width := s.spatialMap.GetWidth()
+	height := s.spatialMap.GetHeight()
+
+	// Wrap the new coordinates to ensure they are within the map boundaries
+	wrappedX := ((newX % width) + width) % width
+	wrappedY := ((newY % height) + height) % height
+
 	// Validate the new coordinates
-	if success := s.spatialMap.ValidateCoord(newX, newY); !success {
+	if success := s.spatialMap.ValidateCoord(wrappedX, wrappedY); !success {
 		return false, fmt.Errorf("invalid coordinates for moving entity")
 	}
 
@@ -344,7 +352,7 @@ func (s *simulation) MoveEntity(entityId uuid.UUID, newX, newY int) (bool, error
 	}
 
 	// Add the entity to the new cell
-	success, err = s.spatialMap.addEntity(newX, newY, entityId)
+	success, err = s.spatialMap.addEntity(wrappedX, wrappedY, entityId)
 	if err != nil || !success {
 		// Attempt to re-add the entity to its original cell in case of failure
 		success, rollbackErr := s.spatialMap.addEntity(currentX, currentY, entityId)
@@ -355,7 +363,7 @@ func (s *simulation) MoveEntity(entityId uuid.UUID, newX, newY int) (bool, error
 	}
 
 	// Update the entity's position
-	s.entities[index].setPosition(newX, newY)
+	s.entities[index].setPosition(wrappedX, wrappedY)
 
 	return true, nil
 }

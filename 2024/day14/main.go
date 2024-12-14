@@ -118,7 +118,7 @@ func parseLines(lines []string) (simulation.Simulation, error) {
 	}
 	sim := simulation.NewSimulation(width, height)
 
-	for i := 1; i < len(lines[1:]); i++ {
+	for i := 1; i < len(lines); i++ {
 		// Each line represents an entity with location and velocity
 		p = strings.Split(lines[i], " ") //p[0]=location, p[1]=velocity
 		pLoc := strings.Split(strings.TrimSpace(strings.TrimPrefix(p[0], "p=")), ",")
@@ -132,11 +132,11 @@ func parseLines(lines []string) (simulation.Simulation, error) {
 		if err != nil {
 			return nil, fmt.Errorf("error parsing y coordinate of entity in line %d: %s", i+1, p[0])
 		}
-		vx, err := strconv.ParseFloat(pVel[0], 64)
+		vx, err := strconv.Atoi(pVel[0])
 		if err != nil {
 			return nil, fmt.Errorf("error parsing x velocity of entity in line %d: %s", i+1, p[0])
 		}
-		vy, err := strconv.ParseFloat(pVel[1], 64)
+		vy, err := strconv.Atoi(pVel[1])
 		if err != nil {
 			return nil, fmt.Errorf("error parsing y velocity of entity in line %d: %s", i+1, p[0])
 		}
@@ -150,14 +150,64 @@ func parseLines(lines []string) (simulation.Simulation, error) {
 		}
 	}
 
-	fmt.Printf("Simulation\n%s", PrintSim(sim))
+	fmt.Printf("Simulation Start\n%s", PrintSim(sim))
 	return sim, nil
+}
+
+func tick(sim simulation.Simulation, tickNumber int) (simulation.Simulation, error) {
+	entities := sim.GetEntities()
+	for _, e := range entities {
+		// Move the entity based on its velocity
+		x, y := e.GetPosition()
+		velX, velY := e.GetVelocity()
+		newX := x + velX
+		newY := y + velY
+		//fmt.Printf("Moving entity %s from (%d, %d) to (%d, %d)\n", e.GetId(), x, y, newX, newY)
+		success, err := sim.MoveEntity(e.GetId(), newX, newY)
+		if err != nil || !success {
+			return sim, fmt.Errorf("error moving entity in tick %d: %s, %v", tickNumber, e.GetId(), err)
+		}
+	}
+	return sim, nil
+}
+
+func calculateSafetyFactor(sim simulation.Simulation) int {
+	// To determine the safest area, count the number of robots in each quadrant
+	// Robots that are exactly in the middle (horizontally or vertically) don't count as being in any quadrant,
+
+	//1. Divide the simulation space into four quadrants.
+	height := sim.GetMap().GetHeight()
+	width := sim.GetMap().GetWidth()
+	quadrantCount := make(map[string]int)
+	for _, e := range sim.GetEntities() {
+		x, y := e.GetPosition()
+		if x < width/2 && y < height/2 {
+			quadrantCount["NW"]++
+		} else if x < width/2 && y > height/2 {
+			quadrantCount["NE"]++
+		} else if x > width/2 && y < height/2 {
+			quadrantCount["SW"]++
+		} else if x > width/2 && y > height/2 {
+			quadrantCount["SE"]++
+		}
+	}
+	fmt.Printf("Quadrant Counts: %+v\n", quadrantCount)
+	//2. Multiply the number of robots in each quadrant together.
+	safetyFactor := quadrantCount["NW"] * quadrantCount["NE"] * quadrantCount["SW"] * quadrantCount["SE"]
+	return safetyFactor
 }
 
 func solve1(sim simulation.Simulation, parallelism int) ([]string, error) {
 	var output = []string{}
 	var safetyFactor = 0
-
+	for tickNumber := 1; tickNumber <= 100; tickNumber++ {
+		_, err := tick(sim, tickNumber)
+		if err != nil {
+			return nil, fmt.Errorf("error during tick %d: %s", tickNumber, err)
+		}
+	}
+	safetyFactor = calculateSafetyFactor(sim)
+	fmt.Printf("Simulation End\n%s", PrintSim(sim))
 	output = append(output, fmt.Sprintf("Safety Factor: %d", safetyFactor))
 	return output, nil
 }
