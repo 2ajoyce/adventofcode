@@ -1,4 +1,4 @@
-package aocIo
+package aocUtils
 
 import (
 	"bufio"
