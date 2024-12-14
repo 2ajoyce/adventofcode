@@ -47,14 +47,14 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func TestMainSmallSuccess1(t *testing.T) {
+func TestMainFailure1(t *testing.T) {
 	// Set up the input data
 	inputData := []string{
 		"Button A: X+94, Y+34\n",
 		"Button B: X+22, Y+67\n",
 		"Prize: X=8400, Y=5400\n",
 	}
-	total := 280
+	total := 0
 	os.WriteFile(INPUT_FILE, []byte(strings.Join(inputData, "")), 0644)
 
 	// Run the main function
@@ -64,14 +64,14 @@ func TestMainSmallSuccess1(t *testing.T) {
 	validateOutput(t, expectedContent)
 }
 
-func TestMainSmallFailure1(t *testing.T) {
+func TestMainSuccess1(t *testing.T) {
 	// Set up the input data
 	inputData := []string{
 		"Button A: X+26, Y+66\n",
 		"Button B: X+67, Y+21\n",
 		"Prize: X=12748, Y=12176\n",
 	}
-	total := 0
+	total := 459236326669
 	os.WriteFile(INPUT_FILE, []byte(strings.Join(inputData, "")), 0644)
 
 	// Run the main function
@@ -81,14 +81,14 @@ func TestMainSmallFailure1(t *testing.T) {
 	validateOutput(t, expectedContent)
 }
 
-func TestMainSmallSuccess2(t *testing.T) {
+func TestMainFailure2(t *testing.T) {
 	// Set up the input data
 	inputData := []string{
 		"Button A: X+17, Y+86\n",
 		"Button B: X+84, Y+37\n",
 		"Prize: X=7870, Y=6450\n",
 	}
-	total := 200
+	total := 0
 	os.WriteFile(INPUT_FILE, []byte(strings.Join(inputData, "")), 0644)
 
 	// Run the main function
@@ -98,14 +98,14 @@ func TestMainSmallSuccess2(t *testing.T) {
 	validateOutput(t, expectedContent)
 }
 
-func TestMainSmallFailure2(t *testing.T) {
+func TestMainSuccess2(t *testing.T) {
 	// Set up the input data
 	inputData := []string{
 		"Button A: X+69, Y+23\n",
 		"Button B: X+27, Y+71\n",
 		"Prize: X=18641, Y=10279\n",
 	}
-	total := 0
+	total := 416082282239
 	os.WriteFile(INPUT_FILE, []byte(strings.Join(inputData, "")), 0644)
 
 	// Run the main function
@@ -134,7 +134,7 @@ func TestMainMedium(t *testing.T) {
 		"Button B: X+27, Y+71\n",
 		"Prize: X=18641, Y=10279\n",
 	}
-	total := 480
+	total := 875318608908
 	os.WriteFile(INPUT_FILE, []byte(strings.Join(inputData, "")), 0644)
 
 	// Run the main function

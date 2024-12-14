@@ -68,9 +68,9 @@ func main() {
 	fmt.Printf("Successfully processed %s and created %s", INPUT_FILE, OUTPUT_FILE)
 }
 
-type ButtonA = [2]int
-type ButtonB = [2]int
-type Coordinate = [2]int
+type ButtonA = [2]int64
+type ButtonB = [2]int64
+type Coordinate = [2]int64
 type Machine struct {
 	ButtonA         ButtonA
 	ButtonB         ButtonB
@@ -83,7 +83,7 @@ func NewMachine(buttonA ButtonA, buttonB ButtonB, prizeLocation Coordinate) *Mac
 	m.ButtonA = buttonA
 	m.ButtonB = buttonB
 	m.PrizeLocation = prizeLocation
-	m.currentPosition = [2]int{0, 0}
+	m.currentPosition = [2]int64{0, 0}
 	return m
 }
 
@@ -92,7 +92,7 @@ func NewMachine(buttonA ButtonA, buttonB ButtonB, prizeLocation Coordinate) *Mac
 // Move will only update the current position if both pastX and pastY return false
 func (m *Machine) Move(buttonA int, buttonB int) (pastX bool, pastY bool) {
 	// Initialize the named return values
-	newPosition := [2]int{m.currentPosition[0], m.currentPosition[1]}
+	newPosition := [2]int64{m.currentPosition[0], m.currentPosition[1]}
 	pastX = false
 	pastY = false
 	// Increment the new location with the buttons
@@ -135,64 +135,116 @@ func parseLines(lines []string) ([]*Machine, error) {
 		}
 		switch line[7] {
 		case 'A':
-			buttonA = [2]int{0, 0}
+			buttonA = [2]int64{0, 0}
 			parts := strings.Split(line[9:], ",")
 			b, err := strconv.Atoi(strings.TrimPrefix(parts[0], " X+")) // This has a space in front
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse buttonA[X]: %v", err)
 			}
-			buttonA[0] = b
+			buttonA[0] = int64(b)
 			b, err = strconv.Atoi(strings.TrimPrefix(parts[1], " Y+")) // This has a space in front
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse buttonA[Y]: %v", err)
 			}
-			buttonA[1] = b
+			buttonA[1] = int64(b)
 		case 'B':
-			buttonB = [2]int{0, 0}
+			buttonB = [2]int64{0, 0}
 			parts := strings.Split(line[12:], ",")
 			b, err := strconv.Atoi(strings.TrimPrefix(parts[0], " X+")) // This has a space in front
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse buttonB[X]: %v", err)
 			}
-			buttonB[0] = b
+			buttonB[0] = int64(b)
 			b, err = strconv.Atoi(strings.TrimPrefix(parts[1], " Y+")) // This has a space in front
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse buttonB[Y]: %v", err)
 			}
-			buttonB[1] = b
+			buttonB[1] = int64(b)
 		case 'X':
-			prizeLocation = [2]int{0, 0}
+			prizeLocation = [2]int64{0, 0}
 			parts := strings.Split(line[7:], ",")
 			p, err := strconv.Atoi(strings.TrimPrefix(parts[0], "X=")) // This has no space in front
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse prizeLocation[X]: %v", err)
 			}
-			prizeLocation[0] = p
+			prizeLocation[0] = int64(p) + int64(10000000000000)
+
 			p, err = strconv.Atoi(strings.TrimPrefix(parts[1], " Y=")) // This has a space in front
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse prizeLocation[Y]: %v", err)
 			}
-			prizeLocation[1] = p
+			prizeLocation[1] = int64(p) + int64(10000000000000)
 			machines = append(machines, NewMachine(buttonA, buttonB, prizeLocation))
 		}
 	}
 	fmt.Printf("Parsed %d machines\n", len(machines))
 	return machines, nil
 }
+
+// Function to compute gcd and coefficients
+func extendedGCD(a, b int64) (gcd, x, y int64) {
+	if b == 0 {
+		return a, 1, 0
+	}
+	gcd, x1, y1 := extendedGCD(b, a%b)
+	x = y1
+	y = x1 - (a/b)*y1
+	return
+}
+
+func solveDiophantine(ax, ay, bx, by, targetX, targetY int64) (nA, nB int64, winnable bool) {
+	// Solve for nA using the first equation
+	// nA * ax + nB * bx = targetX
+	// nA * ay + nB * by = targetY
+
+	// Let's express nB from the first equation:
+	// nB = (targetX - nA * ax) / bx
+
+	// Substitute into the second equation:
+	// nA * ay + ((targetX - nA * ax) / bx) * by = targetY
+	// Multiply through by bx to eliminate denominator:
+	// nA * ay * bx + (targetX - nA * ax) * by = targetY * bx
+	// nA * (ay * bx - ax * by) = targetY * bx - targetX * by
+
+	denominator := ay*bx - ax*by
+	numerator := targetY*bx - targetX*by
+
+	if denominator == 0 {
+		// Parallel lines or no solution
+		return 0, 0, false
+	}
+
+	// Check if denominator divides numerator
+	if numerator%denominator != 0 {
+		return 0, 0, false
+	}
+
+	nA = numerator / denominator
+	if nA < 0 {
+		return 0, 0, false
+	}
+
+	// Now find nB from the first equation
+	if (targetX-nA*ax) < 0 || (targetX-nA*ax)%bx != 0 {
+		return 0, 0, false
+	}
+	nB = (targetX - nA*ax) / bx
+	if nB < 0 {
+		return 0, 0, false
+	}
+
+	return nA, nB, true
+}
+
 func solve1(machines []*Machine, parallelism int) ([]string, error) {
 	output := []string{}
-	results := make(chan int, len(machines))
+	results := make(chan int64, len(machines))
 	semaphore := make(chan struct{}, parallelism)
 
 	for i, m := range machines {
-		go func(idx int, machine *Machine) {
-			var tokens = 0
+		go func(idx int64, machine *Machine) {
+			var tokens = int64(0)
 			semaphore <- struct{}{} // Limit the number of goroutines
-
-			fmt.Printf("Machine %d:\n", idx)
-			fmt.Printf("  Prize Location: (%d, %d)\n", machine.PrizeLocation[0], machine.PrizeLocation[1])
-			fmt.Printf("  Button A: (%d, %d)\n", machine.ButtonA[0], machine.ButtonA[1])
-			fmt.Printf("  Button B: (%d, %d)\n", machine.ButtonB[0], machine.ButtonB[1])
 
 			// Prize location coordinates
 			targetX, targetY := machine.PrizeLocation[0], machine.PrizeLocation[1]
@@ -201,37 +253,23 @@ func solve1(machines []*Machine, parallelism int) ([]string, error) {
 			ax, ay := machine.ButtonA[0], machine.ButtonA[1]
 			bx, by := machine.ButtonB[0], machine.ButtonB[1]
 
-			// Try all possible combinations of n_A and n_B
-			winnable := false
-			for nA := 0; nA <= targetX/ax+1 && nA <= targetY/ay+1; nA++ {
-				for nB := 0; nB <= targetX/bx+1 && nB <= targetY/by+1; nB++ {
-					// Check if the current combination matches the prize location
-					if nA*ax+nB*bx == targetX && nA*ay+nB*by == targetY {
-						fmt.Printf("    Match Found: nA = %d, nB = %d -> Position (%d, %d)\n", nA, nB, targetX, targetY)
-						// Multiply A button presses by 3 and B button presses by 1 to calculate the total tokens
-						tokens += nA*3 + nB*1
-						winnable = true
-						break
-					}
-				}
-				if winnable {
-					break
-				}
+			nA, nB, winnable := solveDiophantine(ax, ay, bx, by, targetX, targetY)
+			if winnable {
+				tokens = nA*3 + nB*1
 			}
 
-			// Output the result
 			results <- tokens
 			if winnable {
-				fmt.Printf("Machine %d: Winnable\n", idx)
+				fmt.Printf("Machine %d: Winnable with nA = %d, nB = %d, Tokens = %d\n", idx, nA, nB, tokens)
 			} else {
 				fmt.Printf("Machine %d: Not Winnable\n", idx)
 			}
 			<-semaphore // Release the semaphore
-		}(i, m)
+		}(int64(i), m)
 	}
 
 	// Collect results
-	var totalTokens = 0
+	var totalTokens = int64(0)
 	for i := 0; i < len(machines); i++ {
 		t := <-results
 		fmt.Printf("Result %d: Tokens = %d\n", i+1, t)
