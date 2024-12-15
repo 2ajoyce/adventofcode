@@ -61,12 +61,12 @@ func TestMainSmall(t *testing.T) {
 		"#.........\n",
 		"......#...\n",
 	}
-	const distinctPositions = 41
+	const obstructionPositions = 6
 	os.WriteFile(INPUT_FILE, []byte(strings.Join(inputData, "")), 0644)
 
 	// Run the main function
 	main()
 
-	expectedContent := fmt.Sprintf("Distinct Positions: %d", distinctPositions)
+	expectedContent := fmt.Sprintf("Obstruction Positions: %d", obstructionPositions)
 	validateOutput(t, expectedContent)
 }

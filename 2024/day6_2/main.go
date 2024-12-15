@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"sync"
 
 	"github.com/google/uuid"
 )
@@ -148,32 +149,153 @@ var (
 
 // TurnRight rotates the direction 90 degrees clockwise
 func TurnRight(dir Direction) Direction {
-	return Direction{vx: dir.vy, vy: -dir.vx}
+	switch dir {
+	case North:
+		return East
+	case East:
+		return South
+	case South:
+		return West
+	case West:
+		return North
+	default:
+		return dir // Return unchanged if not one of the four cardinal directions
+	}
 }
 func solve1(sim simulation.Simulation, workerCount int) ([]string, error) {
 	DEBUG := os.Getenv("DEBUG") == "true"
 	var output []string
-	positions := make(map[Coord]int) // Record the count of times each position is visited
+	var obstructionPositions []Coord
 
-	if DEBUG {
-		fmt.Printf("Starting simulation with %d workers...\n", workerCount)
-		fmt.Println(PrintSim(sim))
+	width := sim.GetMap().GetWidth()
+	height := sim.GetMap().GetHeight()
+
+	// Collect all empty cells where an obstacle can be placed
+	var emptyCells []Coord
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			cell, err := sim.GetMap().GetCell(x, y)
+			if err != nil {
+				if DEBUG {
+					fmt.Printf("Skipping cell (%d, %d) due to error: %v\n", x, y, err)
+				}
+				continue
+			}
+			if len(cell.GetEntityIds()) == 0 {
+				emptyCells = append(emptyCells, Coord{x: x, y: y})
+			}
+		}
 	}
 
-	// Helper function to turn right
-	turnRight := func(current Direction) Direction {
-		switch current {
-		case North:
-			return East
-		case East:
-			return South
-		case South:
-			return West
-		case West:
-			return North
-		default:
-			return current
+	if DEBUG {
+		fmt.Printf("Total empty cells to evaluate: %d\n", len(emptyCells))
+	}
+
+	// Set up concurrency
+	type result struct {
+		coord Coord
+		loop  bool
+	}
+
+	jobs := make(chan Coord, len(emptyCells))
+	resultsChan := make(chan result, len(emptyCells))
+	errorsChan := make(chan error, len(emptyCells))
+
+	var wg sync.WaitGroup
+
+	// Worker function
+	worker := func(workerId int) {
+		defer wg.Done()
+		for coord := range jobs {
+			if DEBUG {
+				fmt.Printf("Worker %d: Processing coordinate (%d,%d)\n", workerId, coord.x, coord.y)
+			}
+			// Clone the original simulation
+			clonedSim := sim.Clone()
+
+			// Create an obstacle entity
+			obstacle, err := simulation.NewEntity(ObstacleEntityType)
+			if err != nil {
+				if DEBUG {
+					fmt.Printf("Worker %d: error creating obstacle entity: %v\n", workerId, err)
+				}
+				// Send error to errorsChan
+				errorsChan <- fmt.Errorf("worker %d: error creating obstacle entity at (%d,%d): %v", workerId, coord.x, coord.y, err)
+
+				// Continue to next job
+				continue
+			}
+
+			// Place the obstacle at the specified coordinate
+			_, err = clonedSim.AddEntity(obstacle, coord.x, coord.y, 0, 0) // Obstacles don't need movement vectors
+			if err != nil {
+				errorsChan <- fmt.Errorf("worker %d: error adding obstacle at (%d,%d): %v", workerId, coord.x, coord.y, err)
+				continue
+			}
+
+			// Run the simulation and check for loops
+			loopDetected, err := detectLoop(workerId, clonedSim)
+			if err != nil {
+				errorsChan <- fmt.Errorf("worker %d: error running simulation: %v", workerId, err)
+				continue
+			}
+			resultsChan <- result{coord: coord, loop: loopDetected}
 		}
+	}
+
+	// Start worker goroutines
+	wg.Add(workerCount)
+	for i := 0; i < workerCount; i++ {
+		go worker(i)
+		if DEBUG {
+			fmt.Printf("Worker %d: Started.\n", i)
+		}
+	}
+
+	// Send jobs
+	for _, coord := range emptyCells {
+		jobs <- coord
+	}
+	close(jobs)
+
+	// Wait for all workers to finish
+	wg.Wait()
+	close(resultsChan)
+	close(errorsChan)
+
+	// Collect errors
+	errSlice := []error{}
+	for err := range errorsChan {
+		errSlice = append(errSlice, err)
+	}
+
+	// If any errors were encountered, return the first one
+	if len(errSlice) > 0 {
+		return nil, errSlice[0]
+	}
+
+	// Collect results
+	for res := range resultsChan {
+		if res.loop {
+			obstructionPositions = append(obstructionPositions, res.coord)
+		}
+	}
+
+	if DEBUG {
+		fmt.Printf("Total obstruction positions causing loops: %d\n", len(obstructionPositions))
+		fmt.Printf("Obstruction Positions: %v\n", obstructionPositions)
+	}
+
+	output = append(output, fmt.Sprintf("Obstruction Positions: %d", len(obstructionPositions)))
+	return output, nil
+}
+
+// detectLoop runs the simulation and determines if the guard enters a loop
+func detectLoop(workerId int, sim simulation.Simulation) (bool, error) {
+	DEBUG := os.Getenv("DEBUG") == "true"
+	if DEBUG {
+		fmt.Printf("Worker %d: Running detectLoop\n", workerId)
+		fmt.Printf("%s\n", PrintSim(sim))
 	}
 
 	// Identify the guard entity
@@ -186,97 +308,96 @@ func solve1(sim simulation.Simulation, workerCount int) ([]string, error) {
 			guardID = entity.GetId()
 			x, y := entity.GetPosition()
 			guardLocation = Coord{x: x, y: y}
-			vx, vy := entity.GetVector() // Returns vx, vy as integers
+			vx, vy := entity.GetVector()
 			guardDirection = Direction{vx: vx, vy: vy}
 			break
 		}
 	}
 
-	// Check if guard was found
+	// If no guard found, cannot detect loop
 	if guardID == uuid.Nil {
-		return nil, fmt.Errorf("no guard entity found in the simulation")
+		return false, fmt.Errorf("no guard found on map")
 	}
 
 	if DEBUG {
-		fmt.Println("Guard Location:", guardLocation)
-		fmt.Println("Guard Direction:", guardDirection)
+		fmt.Printf("Worker %d: Guard Location: (%d, %d), Direction: (%d, %d)\n", workerId, guardLocation.x, guardLocation.y, guardDirection.vx, guardDirection.vy)
 	}
 
-	positions[guardLocation]++ // Starting position of the guard is counted as a visited position
+	// State tracking: position + direction
+	type State struct {
+		x, y   int
+		vx, vy int
+	}
+	visitedStates := make(map[State]bool)
+	visitedStates[State{guardLocation.x, guardLocation.y, guardDirection.vx, guardDirection.vy}] = true
 
-	// Simulation loop
+	// Simulation loop with loop detection
 	for {
 		// Calculate the position in front of the guard based on current direction
 		newX := guardLocation.x + guardDirection.vx
 		newY := guardLocation.y + guardDirection.vy
 
+		if DEBUG {
+			fmt.Printf("Worker %d: Moving Guard to (%d, %d)\n", workerId, newX, newY)
+		}
+
 		// Check if the new position is outside the map boundaries
-		if newX < 0 || newX >= sim.GetMap().GetWidth() || newY < 0 || newY >= sim.GetMap().GetHeight() {
+		if !sim.GetMap().ValidateCoord(newX, newY) {
+			// Guard has left the map; no loop
 			if DEBUG {
-				fmt.Println("Guard has left the map.")
+				fmt.Printf("worker %d: Guard moved (%d, %d) outside the map boundaries (width: %d, height: %d)\n",
+					workerId, newX, newY, sim.GetMap().GetWidth(), sim.GetMap().GetHeight())
 			}
-			break // Guard has left the map; end simulation
+			return false, nil
 		}
 
 		// Check if the space in front is empty
 		cell, err := sim.GetMap().GetCell(newX, newY)
 		if err != nil {
-			return nil, fmt.Errorf("error accessing cell (%d,%d): %v", newX, newY, err)
+			// Error accessing cell; assume no loop
+			return false, fmt.Errorf("worker %d: Error accessing cell at (%d, %d): %v", workerId, newX, newY, err)
 		}
 
-		isEmpty := len(cell.GetEntityIds()) == 0
-
-		if isEmpty {
+		if cell.IsEmpty() {
 			// Move the guard forward
-			success, err := sim.MoveEntity(guardID, newX, newY)
+			err := sim.MoveEntity(guardID, newX, newY, false)
 			if err != nil {
-				return nil, fmt.Errorf("error moving guard: %v", err)
-			}
-			if !success {
-				return nil, fmt.Errorf("failed to move guard to (%d,%d)", newX, newY)
+				// Failed to move; assume no loop
+				return false, fmt.Errorf("worker %d: Failed to move guard to (%d, %d): %v", workerId, newX, newY, err)
 			}
 
 			// Update guard's current location
 			guardLocation = Coord{x: newX, y: newY}
 
-			// Increment the visit count for the new position
-			positions[guardLocation]++
-
 			if DEBUG {
 				fmt.Printf("Guard moved to (%d, %d)\n", newX, newY)
-				fmt.Println(PrintSim(sim))
 			}
+
+			// Check for loop
+			currentState := State{guardLocation.x, guardLocation.y, guardDirection.vx, guardDirection.vy}
+			if visitedStates[currentState] {
+				// Loop detected
+				return true, nil
+			}
+			visitedStates[currentState] = true
 		} else {
 			// Turn the guard to the right
-			guardDirection = turnRight(guardDirection)
+			guardDirection = TurnRight(guardDirection)
 
 			// Update the guard's direction vector in the simulation
 			err := sim.SetEntityVector(guardID, guardDirection.vx, guardDirection.vy)
 			if err != nil {
-				return nil, fmt.Errorf("error updating guard direction: %v", err)
+				// Error updating direction; assume no loop
+				return false, fmt.Errorf("worker %d: Error setting entity vector for guard at (%d, %d): %v", workerId, newX, newY, err)
 			}
 
-			if DEBUG {
-				fmt.Printf("Guard turned right. New direction: (%d, %d)\n", guardDirection.vx, guardDirection.vy)
-				fmt.Println(PrintSim(sim))
+			// Check for loop after turning
+			currentState := State{guardLocation.x, guardLocation.y, guardDirection.vx, guardDirection.vy}
+			if visitedStates[currentState] {
+				// Loop detected
+				return true, nil
 			}
-
-			// Do not move the guard on the same iteration it turned right
+			visitedStates[currentState] = true
 		}
 	}
-
-	// Calculate distinct and total positions visited
-	distinctPositions := len(positions)
-	totalPositions := 0
-	for _, count := range positions {
-		totalPositions += count
-	}
-
-	if DEBUG {
-		fmt.Println("Total positions visited by the guard:", totalPositions)
-		fmt.Println("Distinct positions visited by the guard:", distinctPositions)
-	}
-
-	output = append(output, fmt.Sprintf("Distinct Positions: %d", distinctPositions))
-	return output, nil
 }
