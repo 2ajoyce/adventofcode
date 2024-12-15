@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/google/uuid"
+	"github.com/schollz/progressbar/v3"
 )
 
 func main() {
@@ -73,8 +73,6 @@ func main() {
 
 func PrintSim(sim simulation.Simulation) string {
 	var output string
-	// Map each entity id to a character for printing purposes
-	entityChar := map[uuid.UUID]string{}
 	for y := 0; y < sim.GetMap().GetHeight(); y++ {
 		for x := 0; x < sim.GetMap().GetWidth(); x++ {
 			cell, err := sim.GetMap().GetCell(x, y)
@@ -84,13 +82,9 @@ func PrintSim(sim simulation.Simulation) string {
 			}
 			ids := cell.GetEntityIds()
 			if len(ids) == 0 {
-				output += "."
+				output += " "
 			} else {
-				// Check if id[0] is not in the map, assign it a letter
-				if _, ok := entityChar[ids[0]]; !ok {
-					entityChar[ids[0]] = string(rune(len(entityChar) + 'A'))
-				}
-				output += entityChar[ids[0]]
+				output += "#"
 			}
 		}
 		output += "\n"
@@ -150,7 +144,6 @@ func parseLines(lines []string) (simulation.Simulation, error) {
 		}
 	}
 
-	fmt.Printf("Simulation Start\n%s", PrintSim(sim))
 	return sim, nil
 }
 
@@ -191,23 +184,52 @@ func calculateSafetyFactor(sim simulation.Simulation) int {
 			quadrantCount["SE"]++
 		}
 	}
-	fmt.Printf("Quadrant Counts: %+v\n", quadrantCount)
+
 	//2. Multiply the number of robots in each quadrant together.
 	safetyFactor := quadrantCount["NW"] * quadrantCount["NE"] * quadrantCount["SW"] * quadrantCount["SE"]
 	return safetyFactor
 }
 
+type OutputRecord struct {
+	tick         int
+	safetyFactor int
+	visual       string
+}
+
 func solve1(sim simulation.Simulation, parallelism int) ([]string, error) {
 	var output = []string{}
+	const maxTick = 10000
+	bar := progressbar.Default(maxTick)
+	var safestTick = 0
+	safetyMap := map[int]OutputRecord{}
 	var safetyFactor = 0
-	for tickNumber := 1; tickNumber <= 100; tickNumber++ {
+
+	for tickNumber := 1; tickNumber <= maxTick; tickNumber++ {
+		// fmt.Printf("Tick %d\n%s", tickNumber, PrintSim(sim))
 		_, err := tick(sim, tickNumber)
 		if err != nil {
 			return nil, fmt.Errorf("error during tick %d: %s", tickNumber, err)
 		}
+		bar.Add(1)
+
+		sf := calculateSafetyFactor(sim)
+		if safetyFactor == 0 || sf <= safetyFactor {
+			safetyFactor = sf
+			visual := PrintSim(sim)
+			safetyMap[tickNumber] = OutputRecord{tick: tickNumber, safetyFactor: sf, visual: visual}
+		}
 	}
-	safetyFactor = calculateSafetyFactor(sim)
-	fmt.Printf("Simulation End\n%s", PrintSim(sim))
+	safetyFactor = calculateSafetyFactor(sim) // At the end, set the safety factor to the last frame
+
+	// Print the output records
+	safestTickText := []string{}
+	for _, record := range safetyMap {
+		safestTickText = append(output, fmt.Sprintf("Tick %d Safety Factor: %d\nVisual:\n%s\n", record.tick, record.safetyFactor, record.visual))
+	}
+
+	fmt.Printf("The safest tick is %d with a safety factor of %d\n", safestTick, safetyFactor)
+	// Save a visual of the safest tick to a file
+	aocUtils.WriteOutput("safest_tick.txt", safestTickText)
 	output = append(output, fmt.Sprintf("Safety Factor: %d", safetyFactor))
 	return output, nil
 }
