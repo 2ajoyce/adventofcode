@@ -70,7 +70,30 @@ func TestMainSmall(t *testing.T) {
 	// #...O..#
 	// #...O..#
 	// ########
-	const total = 2028
+	const total = 1745
+	os.WriteFile(INPUT_FILE, []byte(strings.Join(inputData, "")), 0644)
+
+	// Run the main function
+	main()
+
+	expectedContent := fmt.Sprintf("Total: %d", total)
+	validateOutput(t, expectedContent)
+}
+
+func TestMainDoubleBox(t *testing.T) {
+	// Set up the input data
+	inputData := []string{
+		"#######\n",
+		"#...#.#\n",
+		"#.....#\n",
+		"#..OO@#\n",
+		"#..O..#\n",
+		"#.....#\n",
+		"#######\n",
+		"\n",
+		"<vv<<^^<<^^\n",
+	}
+	const total = 615
 	os.WriteFile(INPUT_FILE, []byte(strings.Join(inputData, "")), 0644)
 
 	// Run the main function

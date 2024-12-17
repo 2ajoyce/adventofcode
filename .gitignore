@@ -27,3 +27,5 @@ go.work.sum
 # Custom for this project
 input.txt
 output.txt
+test_input.txt
+test_output.txt

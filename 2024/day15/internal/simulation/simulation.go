@@ -1,6 +1,7 @@
 package simulation
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 
@@ -137,8 +138,8 @@ type SpatialMap interface {
 	GetHeight() int
 	GetWidth() int
 	GetIndex(coord Coord) int
-	removeEntity(coord Coord, entityId uuid.UUID) error // Mutation functions are private
-	addEntity(coord Coord, entityId uuid.UUID) error    // Renamed from setEntity
+	removeEntity(entityId uuid.UUID, coords ...Coord) error // Mutation functions are private
+	addEntity(entityId uuid.UUID, coords ...Coord) error    // Renamed from setEntity
 	ValidateCoord(coord Coord) bool
 	Clone() SpatialMap
 }
@@ -189,21 +190,64 @@ func (m *spatialMap) ValidateCoord(coord Coord) bool {
 	return true
 }
 
-func (m *spatialMap) addEntity(coord Coord, entityId uuid.UUID) error {
-	cell, err := m.GetCell(coord)
-	if err != nil {
-		return fmt.Errorf("error accessing cell at coordinates %s: %w", coord.String(), err)
+func (m *spatialMap) addEntity(entityId uuid.UUID, coords ...Coord) error {
+	var modifiedCells []SpatialMapCell
+	var cellErrs []error = nil
+	var rollbackErrs []error = nil
+	for _, coord := range coords {
+		cell, cellErr := m.GetCell(coord)
+		if cellErr != nil {
+			cellErrs = append(cellErrs, fmt.Errorf("error accessing cell at coordinates %s: %w", coord.String(), cellErr))
+			break
+		}
+		cellErr = cell.addEntityId(entityId)
+		if cellErr != nil {
+			cellErrs = append(cellErrs, fmt.Errorf("error adding entity %s to cell %s: %w", entityId, coord.String(), cellErr))
+			break
+		}
+		modifiedCells = append(modifiedCells, cell)
 	}
-	return cell.addEntityId(entityId)
+	if cellErrs != nil {
+		for _, cell := range modifiedCells {
+			rollbackErr := cell.removeEntityId(entityId)
+			if rollbackErr != nil {
+				rollbackErrs = append(rollbackErrs, rollbackErr)
+			}
+		}
+	}
+	cellErr := errors.Join(cellErrs...)
+	rollbackErr := errors.Join(rollbackErrs...)
+	return errors.Join(cellErr, rollbackErr)
 }
 
-func (m *spatialMap) removeEntity(coord Coord, entityId uuid.UUID) error {
-	cell, err := m.GetCell(coord)
-	if err != nil {
-		return fmt.Errorf("error accessing cell at coordinates %s: %w", coord.String(), err)
+func (m *spatialMap) removeEntity(entityId uuid.UUID, coords ...Coord) error {
+	var modifiedCells []SpatialMapCell
+	var cellErrs []error = nil
+	var rollbackErrs []error = nil
+	for _, coord := range coords {
+		cell, cellErr := m.GetCell(coord)
+		if cellErr != nil {
+			cellErrs = append(cellErrs, fmt.Errorf("error accessing cell at coordinates %s: %w", coord.String(), cellErr))
+			break
+		}
+		cellErr = cell.removeEntityId(entityId)
+		if cellErr != nil {
+			cellErrs = append(cellErrs, fmt.Errorf("error removing entity %s from cell %s: %w", entityId, coord.String(), cellErr))
+			break
+		}
+		modifiedCells = append(modifiedCells, cell)
 	}
-
-	return cell.removeEntityId(entityId)
+	if cellErrs != nil { // Rollback
+		for _, cell := range modifiedCells {
+			rollbackErr := cell.addEntityId(entityId)
+			if rollbackErr != nil {
+				rollbackErrs = append(rollbackErrs, rollbackErr)
+			}
+		}
+	}
+	cellErr := errors.Join(cellErrs...)
+	rollbackErr := errors.Join(rollbackErrs...)
+	return errors.Join(cellErr, rollbackErr)
 }
 
 func (m *spatialMap) clone() *spatialMap {
@@ -241,17 +285,17 @@ func (m *spatialMap) Clone() SpatialMap {
 type Entity interface {
 	GetId() uuid.UUID
 	GetEntityType() string
-	GetPosition() (coord Coord)
-	GetVector() (direction Direction)
-	setPosition(coord Coord)       // Mutation functions are private
-	setVector(direction Direction) // Mutation functions are private
-	Clone() Entity                 // Added Clone() method
+	GetPosition() (coords []Coord)
+	GetDirection() (direction Direction)
+	setPosition(coords ...Coord)      // Mutation functions are private
+	setDirection(direction Direction) // Mutation functions are private
+	Clone() Entity                    // Added Clone() method
 }
 
 type entity struct {
 	id         uuid.UUID
 	entityType string
-	coord      Coord
+	coords     []Coord
 	direction  Direction
 }
 
@@ -263,8 +307,8 @@ func NewEntity(entityType string) (Entity, error) {
 	}
 	e.id = id
 	e.entityType = entityType
-	e.setPosition(Coord{X: 0, Y: 0})     // Default position is the origin
-	e.setVector(Direction{VX: 0, VY: 0}) // Default vector is zero
+	e.setPosition(Coord{X: 0, Y: 0})        // Default position is the origin
+	e.setDirection(Direction{VX: 0, VY: 0}) // Default vector is zero
 	return e, nil
 }
 
@@ -272,24 +316,30 @@ func (e *entity) GetId() uuid.UUID {
 	return e.id
 }
 
-func (e *entity) GetPosition() (coord Coord) {
-	coord.X = e.coord.X
-	coord.Y = e.coord.Y
+func (e *entity) GetPosition() (coords []Coord) {
+	coords = make([]Coord, len(e.coords))
+	for i, coord := range e.coords {
+		coords[i].X = coord.X
+		coords[i].Y = coord.Y
+	}
 	return
 }
 
-func (e *entity) setPosition(coord Coord) {
-	e.coord.X = coord.X
-	e.coord.Y = coord.Y
+func (e *entity) setPosition(coords ...Coord) {
+	e.coords = make([]Coord, len(coords))
+	for i, coord := range coords {
+		e.coords[i].X = coord.X
+		e.coords[i].Y = coord.Y
+	}
 }
 
-func (e *entity) GetVector() (direction Direction) {
+func (e *entity) GetDirection() (direction Direction) {
 	direction.VX = e.direction.VX
 	direction.VY = e.direction.VY
 	return
 }
 
-func (e *entity) setVector(direction Direction) {
+func (e *entity) setDirection(direction Direction) {
 	e.direction.VX = direction.VX
 	e.direction.VY = direction.VY
 }
@@ -303,8 +353,8 @@ func (e *entity) clone() Entity {
 	clone := new(entity)
 	clone.id = e.id
 	clone.entityType = e.entityType
-	clone.setPosition(e.coord)
-	clone.setVector(e.direction)
+	clone.setPosition(e.coords...)
+	clone.setDirection(e.direction)
 	return clone
 }
 
@@ -318,11 +368,11 @@ func (e *entity) Clone() Entity {
 /////////////////////////////////////////////////////////////////////////////////////
 
 type Simulation interface {
-	AddEntity(e Entity, coord Coord, direction Direction) (Entity, error)
+	AddEntity(e Entity, coords []Coord, direction Direction) (Entity, error)
 	GetEntity(entityId uuid.UUID) (Entity, error)
 	GetEntities() []Entity
-	MoveEntity(entityId uuid.UUID, newCoord Coord, wrapping bool) error
-	SetEntityVector(entityId uuid.UUID, newDirection Direction) error
+	MoveEntity(entityId uuid.UUID, wrapping bool) error
+	SetEntityDirection(entityId uuid.UUID, newDirection Direction) error
 	RemoveEntity(entityId uuid.UUID) error
 	GetMap() SpatialMap
 	Clone() Simulation
@@ -367,27 +417,33 @@ func (s *simulation) GetEntities() []Entity {
 	return entitiesCopy
 }
 
-func (s *simulation) AddEntity(e Entity, coord Coord, direction Direction) (Entity, error) {
+func (s *simulation) AddEntity(e Entity, coords []Coord, direction Direction) (Entity, error) {
 	// Lock the mutex to ensure thread safety when adding entities
 	s.updateMutex.Lock()
 	defer s.updateMutex.Unlock()
 
 	// Validate the coordinates before adding the entity
-	if valid := s.spatialMap.ValidateCoord(coord); !valid {
-		return nil, fmt.Errorf("invalid coordinates %s for new entity", coord.String())
+	for _, coord := range coords {
+		if valid := s.spatialMap.ValidateCoord(coord); !valid {
+			return nil, fmt.Errorf("invalid coordinates %s for new entity", coord.String())
+		}
 	}
 
 	// Add the entity to the spatial map at the specified coordinates
-	err := s.spatialMap.addEntity(coord, e.GetId())
+	err := s.spatialMap.addEntity(e.GetId(), coords...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to add entity at coordinates %s", coord.String())
+		var coordStr string
+		for _, coord := range coords {
+			coordStr += coord.String()
+		}
+		return nil, fmt.Errorf("failed to add entity at coordinates %s", coordStr)
 	}
 
 	// Update the entity's position
-	e.setPosition(coord)
+	e.setPosition(coords...)
 
 	// Update the entity's vector
-	e.setVector(direction)
+	e.setDirection(direction)
 
 	// Add the entity to the slice and map
 	s.entities = append(s.entities, e)
@@ -409,10 +465,10 @@ func (s *simulation) RemoveEntity(entityId uuid.UUID) error {
 
 	// Get the entity from the slice using the index
 	entityToRemove := s.entities[index]
-	coord := entityToRemove.GetPosition()
+	coords := entityToRemove.GetPosition()
 
 	// Remove the entity from the spatial map
-	err := s.spatialMap.removeEntity(coord, entityId)
+	err := s.spatialMap.removeEntity(entityId, coords...)
 	if err != nil {
 		return fmt.Errorf("error removing entity from spatial map: %v", err)
 	}
@@ -429,7 +485,8 @@ func (s *simulation) RemoveEntity(entityId uuid.UUID) error {
 	return nil
 }
 
-func (s *simulation) MoveEntity(entityId uuid.UUID, newCoord Coord, wrapping bool) error {
+// Move the entity based on the entity location and direction
+func (s *simulation) MoveEntity(entityId uuid.UUID, wrapping bool) error {
 	// Lock the mutex to ensure thread safety when moving entities
 	s.updateMutex.Lock()
 	defer s.updateMutex.Unlock()
@@ -438,15 +495,28 @@ func (s *simulation) MoveEntity(entityId uuid.UUID, newCoord Coord, wrapping boo
 	width := s.spatialMap.GetWidth()
 	height := s.spatialMap.GetHeight()
 
-	if wrapping {
-		// Wrap the new coordinates so that when entities leave the map they re-enter on the other side.
-		newCoord.X = ((newCoord.X % width) + width) % width
-		newCoord.Y = ((newCoord.Y % height) + height) % height
+	entity, err := s.GetEntity(entityId)
+	if err != nil {
+		return fmt.Errorf("error accessing entity %s", entityId.String())
+	}
+
+	var newCoords []Coord
+	for _, coord := range entity.GetPosition() {
+		newCoord := coord.Move(entity.GetDirection())
+
+		if wrapping {
+			// Wrap the new coordinates so that when entities leave the map they re-enter on the other side.
+			newCoord.X = ((newCoord.X % width) + width) % width
+			newCoord.Y = ((newCoord.Y % height) + height) % height
+		}
+		newCoords = append(newCoords, newCoord)
 	}
 
 	// Validate the new coordinates
-	if success := s.spatialMap.ValidateCoord(newCoord); !success {
-		return fmt.Errorf("invalid coordinates %s for moving entity", newCoord.String())
+	for _, newCoord := range newCoords {
+		if success := s.spatialMap.ValidateCoord(newCoord); !success {
+			return fmt.Errorf("can not move entity to invalid coordinates %s", newCoord.String())
+		}
 	}
 
 	// Find the index of the entity
@@ -457,19 +527,19 @@ func (s *simulation) MoveEntity(entityId uuid.UUID, newCoord Coord, wrapping boo
 	}
 
 	// Get the current position of the entity
-	currentCoord := s.entities[index].GetPosition()
+	currentCoords := s.entities[index].GetPosition()
 
 	// Remove the entity from its current cell
-	err := s.spatialMap.removeEntity(currentCoord, entityId)
+	err = s.spatialMap.removeEntity(entityId, currentCoords...)
 	if err != nil {
-		return fmt.Errorf("failed to remove entity from current cell at %s: %v", currentCoord.String(), err)
+		return fmt.Errorf("failed to remove entity from current location: %v", err)
 	}
 
 	// Add the entity to the new cell
-	err = s.spatialMap.addEntity(newCoord, entityId)
+	err = s.spatialMap.addEntity(entityId, newCoords...)
 	if err != nil {
 		// Attempt to re-add the entity to its original cell in case of failure
-		rollbackErr := s.spatialMap.addEntity(currentCoord, entityId)
+		rollbackErr := s.spatialMap.addEntity(entityId, currentCoords...)
 		if rollbackErr != nil {
 			return fmt.Errorf("failed to move entity and failed to rollback: %v", rollbackErr)
 		}
@@ -477,12 +547,12 @@ func (s *simulation) MoveEntity(entityId uuid.UUID, newCoord Coord, wrapping boo
 	}
 
 	// Update the entity's position
-	s.entities[index].setPosition(newCoord)
+	s.entities[index].setPosition(newCoords...)
 
 	return nil
 }
 
-func (s *simulation) SetEntityVector(entityId uuid.UUID, newDirection Direction) error {
+func (s *simulation) SetEntityDirection(entityId uuid.UUID, newDirection Direction) error {
 	// Lock the mutex to ensure thread safety when moving entities
 	s.updateMutex.Lock()
 	defer s.updateMutex.Unlock()
@@ -494,7 +564,7 @@ func (s *simulation) SetEntityVector(entityId uuid.UUID, newDirection Direction)
 	}
 
 	// Update the entity's vector
-	s.entities[index].setVector(newDirection)
+	s.entities[index].setDirection(newDirection)
 
 	return nil
 }

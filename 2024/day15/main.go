@@ -4,9 +4,13 @@ import (
 	"day15/internal/aocUtils"
 	"day15/internal/simulation"
 	"fmt"
+	"math"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 func main() {
@@ -86,6 +90,8 @@ func CalculateDirection(s string) (simulation.Direction, error) {
 
 const FishEntityType = "@"
 const ObstacleEntityType = "#"
+const LeftBoxEntityType = "["
+const RightBoxEntityType = "]"
 const BoxEntityType = "O"
 
 func parseLines(lines []string) (simulation.Simulation, []simulation.Direction, error) {
@@ -105,15 +111,40 @@ func parseLines(lines []string) (simulation.Simulation, []simulation.Direction, 
 		}
 	}
 
+	var transformedLines []string
+	for _, line := range lines {
+		// If empty line, break
+		if strings.TrimSpace(line) == "" {
+			break
+		}
+
+		var transformedLine string
+		for _, char := range line {
+			switch char {
+			case '#':
+				transformedLine = transformedLine + "##"
+			case 'O':
+				transformedLine = transformedLine + "[]"
+			case '.':
+				transformedLine = transformedLine + ".."
+			case '@':
+				transformedLine = transformedLine + "@."
+			}
+		}
+		transformedLine += "\n"
+		transformedLines = append(transformedLines, transformedLine)
+	}
+	fmt.Println(transformedLines)
+
 	// Lines above the blank line are the map, Lines below the blank line are the series of actions to perform
 	// Skip the first line as it represents the north wall of the map
-	// Skip the first and last characters of each line as they represent the walls of the mam
-	width := len(lines[1]) - 2
+	// Skip the first 2 and last 2 characters of each line as they represent the walls of the mam
+	width := len(transformedLines[1]) - 5
 	height := blankLineNum - 2
 	sim := simulation.NewSimulation(width, height)
 	for y := 1; y <= height; y++ {
-		for x := 1; x <= width; x++ {
-			entityType := string(lines[y][x])
+		for x := 3; x <= width; x++ {
+			entityType := string(transformedLines[y][x])
 			if entityType == "." {
 				continue
 			}
@@ -121,7 +152,18 @@ func parseLines(lines []string) (simulation.Simulation, []simulation.Direction, 
 			if err != nil {
 				return nil, nil, fmt.Errorf("error creating fish entity: %v", err)
 			}
-			sim.AddEntity(entity, simulation.Coord{X: x - 1, Y: y - 1}, simulation.North)
+			coords := []simulation.Coord{{X: x - 2, Y: y - 1}}
+			if entityType == LeftBoxEntityType {
+				continue // Skip the left box, add it when the right half is parsed
+			}
+			if entityType == RightBoxEntityType {
+				entity, err = simulation.NewEntity(BoxEntityType)
+				if err != nil {
+					return nil, nil, fmt.Errorf("error creating box entity: %v", err)
+				}
+				coords = append(coords, simulation.Coord{X: x - 3, Y: y - 1})
+			}
+			sim.AddEntity(entity, coords, simulation.North)
 		}
 	}
 
@@ -157,7 +199,16 @@ func PrintSim(sim simulation.Simulation) string {
 				if err != nil {
 					output += "?"
 				}
-				output += string(entity.GetEntityType())
+				if entity.GetEntityType() == BoxEntityType {
+					if float64(x) == math.Max(float64(entity.GetPosition()[0].X), float64(entity.GetPosition()[1].X)) {
+						output += string(RightBoxEntityType)
+					} else {
+						output += string(LeftBoxEntityType)
+					}
+
+				} else {
+					output += string(entity.GetEntityType())
+				}
 			}
 		}
 		output += "\n"
@@ -179,52 +230,55 @@ func solve1(sim simulation.Simulation, actions []simulation.Direction, workerCou
 		fmt.Printf("Actions: %v\n", actions)
 	}
 
+	fmt.Printf("Height: %d, Width: %d\n", height, width)
+	fmt.Println(PrintSim(sim))
+
 	// Find the coordinates of the fish
 	fish := findFish(sim)
 	if fish == nil {
 		return nil, fmt.Errorf("fish entity not found in the simulation")
 	}
-	fishPosition := fish.GetPosition()
+	if DEBUG {
+		fmt.Printf("Fish is at %s\n", fish.GetPosition()[0].String())
+	}
 
 	for _, direction := range actions {
 		if DEBUG {
 			fmt.Printf("Taking action: %v\n", direction)
 		}
-		// Calculate the next position the fish wants to move to
-		nextPosition := fishPosition.Move(direction)
-		if !sim.GetMap().ValidateCoord(nextPosition) {
-			if DEBUG {
-				fmt.Printf("Skipping action due to leaving the map at position %s\n", nextPosition.String())
-			}
-			continue
-		}
 
-		// Attempt to move boxes recursively if necessary
-		canMove, err := canMoveBoxesRecursive(sim, nextPosition, direction, DEBUG)
+		canMove, err := canEntityMove(sim, fish, direction, 0)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("error checking if fish can move: %v", err)
 		}
+		fmt.Println(PrintSim(sim))
 		if !canMove {
 			if DEBUG {
-				fmt.Printf("Cannot move in direction %v due to obstacles or map boundaries\n", direction)
+				fmt.Printf("Cannot move fish. Skipping action %v\n", direction)
 			}
-			continue
+			continue // If we can't move, continue to the next action
+		}
+		if DEBUG {
+			fmt.Println("Fish can move")
 		}
 
-		// If canMove is true, proceed to move all boxes
-		if err := moveBoxesRecursive(sim, nextPosition, direction, DEBUG); err != nil {
-			return nil, err
-		}
-
-		// Now, move the fish
-		err = sim.MoveEntity(fish.GetId(), nextPosition, false)
+		moved, err := moveEntity(sim, fish, direction, 0)
 		if err != nil {
-			return nil, fmt.Errorf("error moving fish to position %s: %v", nextPosition.String(), err)
+			return nil, fmt.Errorf("error moving fish: %v", err)
 		}
-		fishPosition = nextPosition
+		if !moved {
+			if DEBUG {
+				fmt.Printf("Did not move fish. Skipping action %v\n", direction)
+			}
+			continue // If we didn't move, continue to the next action
+		}
 
 		if DEBUG {
-			fmt.Printf("Moved fish to %s\n", nextPosition.String())
+			fish, err = sim.GetEntity(fish.GetId())
+			if err != nil {
+				fmt.Printf("Error getting fish: %v\n", err)
+			}
+			fmt.Printf("Moved fish to %v\n", fish.GetPosition())
 			fmt.Printf("%s\n", PrintSim(sim))
 		}
 	}
@@ -233,90 +287,33 @@ func solve1(sim simulation.Simulation, actions []simulation.Direction, workerCou
 	return output, nil
 }
 
-// canMoveBoxesRecursive checks if all boxes in the specified direction can be moved.
-func canMoveBoxesRecursive(sim simulation.Simulation, position simulation.Coord, direction simulation.Direction, DEBUG bool) (bool, error) {
-	if !sim.GetMap().ValidateCoord(position) {
-		if DEBUG {
-			fmt.Printf("Cannot move: position %s is out of bounds\n", position.String())
+func getEntityIds(sim simulation.Simulation, coords []simulation.Coord) ([]uuid.UUID, error) {
+	var entityIds []uuid.UUID
+	for _, coord := range coords {
+		cell, err := sim.GetMap().GetCell(coord)
+		if err != nil {
+			return nil, fmt.Errorf("error getting cell at position %s: %v", coord.String(), err)
 		}
-		return false, nil
+		entityIds = append(entityIds, cell.GetEntityIds()...)
 	}
-
-	cell, err := sim.GetMap().GetCell(position)
-	if err != nil {
-		return false, fmt.Errorf("error retrieving cell at position %s: %v", position.String(), err)
-	}
-
-	if cell.IsEmpty() {
-		// Base case: no box to move, so movement is possible
-		return true, nil
-	}
-
-	entityID := cell.GetEntityIds()[0]
-	entity, err := sim.GetEntity(entityID)
-	if err != nil {
-		return false, fmt.Errorf("error retrieving entity at position %s: %v", position.String(), err)
-	}
-
-	switch entity.GetEntityType() {
-	case ObstacleEntityType:
-		if DEBUG {
-			fmt.Printf("Cannot move: obstacle at position %s\n", position.String())
-		}
-		return false, nil
-	case BoxEntityType:
-		// Calculate the next position in the same direction
-		nextPosition := position.Move(direction)
-		// Recursively check if the next box can be moved
-		return canMoveBoxesRecursive(sim, nextPosition, direction, DEBUG)
-	default:
-		// Unknown entity type; treat as non-movable
-		if DEBUG {
-			fmt.Printf("Cannot move: unknown entity type '%s' at position %s\n", entity.GetEntityType(), position.String())
-		}
-		return false, nil
-	}
+	return entityIds, nil
 }
 
-// moveBoxesRecursive moves all boxes in the specified direction.
-func moveBoxesRecursive(sim simulation.Simulation, position simulation.Coord, direction simulation.Direction, DEBUG bool) error {
-	cell, err := sim.GetMap().GetCell(position)
+func getEntities(sim simulation.Simulation, coords []simulation.Coord) ([]simulation.Entity, error) {
+	var entities []simulation.Entity
+	entityIds, err := getEntityIds(sim, coords)
 	if err != nil {
-		return fmt.Errorf("error retrieving cell at position %s: %v", position.String(), err)
+		return nil, fmt.Errorf("error getting entity ids for coords %v", coords)
+	}
+	for _, entityId := range entityIds {
+		entity, err := sim.GetEntity(entityId)
+		if err != nil {
+			return nil, fmt.Errorf("error getting entity for id %s", entityId)
+		}
+		entities = append(entities, entity)
 	}
 
-	if cell.IsEmpty() {
-		// Base case: no box to move
-		return nil
-	}
-
-	entityID := cell.GetEntityIds()[0]
-	entity, err := sim.GetEntity(entityID)
-	if err != nil {
-		return fmt.Errorf("error retrieving entity at position %s: %v", position.String(), err)
-	}
-
-	if entity.GetEntityType() != BoxEntityType {
-		return fmt.Errorf("entity at position %s is not a box", position.String())
-	}
-
-	// Calculate the next position in the same direction
-	nextPosition := position.Move(direction)
-
-	// Recursively move the next boxes first
-	if err := moveBoxesRecursive(sim, nextPosition, direction, DEBUG); err != nil {
-		return err
-	}
-
-	// Now, move the current box
-	err = sim.MoveEntity(entity.GetId(), nextPosition, false)
-	if err != nil {
-		return fmt.Errorf("error moving box from %s to %s: %v", position.String(), nextPosition.String(), err)
-	}
-	if DEBUG {
-		fmt.Printf("Moved box from %s to %s\n", position.String(), nextPosition.String())
-	}
-	return nil
+	return entities, nil
 }
 
 func findFish(sim simulation.Simulation) simulation.Entity {
@@ -328,14 +325,149 @@ func findFish(sim simulation.Simulation) simulation.Entity {
 	return nil
 }
 
+const MAX_RECURSION_DEPTH = 1000
+
+// This recursive function will check if an object can move
+func canEntityMove(sim simulation.Simulation, entity simulation.Entity, direction simulation.Direction, depth int) (bool, error) {
+	DEBUG := os.Getenv("DEBUG") == "true"
+	if depth > MAX_RECURSION_DEPTH {
+		return false, fmt.Errorf("depth exceeded")
+	}
+	canMove := true
+	switch entity.GetEntityType() {
+	case ObstacleEntityType:
+		if DEBUG {
+			fmt.Printf("Found Obstacle EntityType at position: %v\n", entity.GetPosition())
+		}
+		canMove = false
+	case FishEntityType, BoxEntityType:
+		if DEBUG {
+			fmt.Printf("Found %s EntityType at position: %v\n", entity.GetEntityType(), entity.GetPosition())
+		}
+		coords := entity.GetPosition()
+		if DEBUG {
+			fmt.Printf("Checking coordinates %v\n", coords)
+		}
+		nextCoords := []simulation.Coord{}
+		for _, coord := range coords {
+			if !sim.GetMap().ValidateCoord(coord) {
+				return false, nil
+			}
+			nextCoord := simulation.Coord{X: coord.X, Y: coord.Y}
+			nextCoord = nextCoord.Move(direction)
+			if !sim.GetMap().ValidateCoord(nextCoord) {
+				return false, nil
+
+			}
+			if slices.Contains(coords, nextCoord) {
+				continue // Don't check your own coords
+			}
+			nextCoords = append(nextCoords, nextCoord)
+		}
+		entities, err := getEntities(sim, nextCoords)
+		if err != nil {
+			return false, fmt.Errorf("error getting entities for coords %v", nextCoords)
+		}
+		dedupedEntities := []simulation.Entity{}
+		for _, e := range entities {
+			if !slices.Contains(dedupedEntities, e) {
+				dedupedEntities = append(dedupedEntities, e)
+			}
+		}
+		if DEBUG {
+			fmt.Printf("Found %d entities at coords %v\n", len(dedupedEntities), nextCoords)
+		}
+		for _, e := range dedupedEntities {
+			success, err := canEntityMove(sim, e, direction, depth+1)
+			if err != nil {
+				return false, fmt.Errorf("error checking if entity can move for direction %v", direction)
+			}
+			if !success {
+				canMove = false
+				break
+			}
+		}
+	}
+	return canMove, nil
+}
+
+// This recursive function will move an object
+func moveEntity(sim simulation.Simulation, entity simulation.Entity, direction simulation.Direction, depth int) (bool, error) {
+	DEBUG := os.Getenv("DEBUG") == "true"
+	if depth > MAX_RECURSION_DEPTH {
+		return false, fmt.Errorf("max recursion depth reached for entity %v at position %v", entity.GetEntityType(), entity.GetPosition())
+	}
+	switch entity.GetEntityType() {
+	case ObstacleEntityType:
+		if DEBUG {
+			fmt.Printf("Tried to move Obstacle EntityType at position: %v\n", entity.GetPosition())
+		}
+		return false, nil // Obstacles can not move
+	case FishEntityType, BoxEntityType:
+		if DEBUG {
+			fmt.Printf("Tried to move %s EntityType at position: %v\n", entity.GetEntityType(), entity.GetPosition())
+		}
+		coords := entity.GetPosition()
+		nextCoords := []simulation.Coord{}
+		for _, coord := range coords {
+			if !sim.GetMap().ValidateCoord(coord) {
+				return false, nil // Can not move to invalid coords
+			}
+			nextCoord := simulation.Coord{X: coord.X, Y: coord.Y}
+			nextCoords = append(nextCoords, nextCoord.Move(direction))
+		}
+		entities, err := getEntities(sim, nextCoords)
+		if err != nil {
+			return false, fmt.Errorf("error getting entities for coords %v", coords)
+		}
+		dedupedEntities := []simulation.Entity{}
+		for _, e := range entities {
+			if !slices.Contains(dedupedEntities, e) {
+				dedupedEntities = append(dedupedEntities, e)
+			}
+		}
+		for _, e := range dedupedEntities {
+			if entity.GetId() == e.GetId() {
+				continue // Don't try to move yourself
+			}
+			success, err := moveEntity(sim, e, direction, depth+1)
+			if err != nil {
+				return false, fmt.Errorf("error moving entity %v", e)
+			}
+			if !success {
+				return false, nil // If any entity can not move, return false
+			}
+		}
+		// If every location is valid and every entity in those locations can move
+		err = sim.SetEntityDirection(entity.GetId(), direction)
+		if err != nil {
+			return false, fmt.Errorf("error setting direction for entity %v", entity)
+		}
+		err = sim.MoveEntity(entity.GetId(), false)
+		if err != nil {
+			return false, fmt.Errorf("error moving entity %v", entity)
+		}
+	}
+	return true, nil
+}
+
 func calculateTotal(sim simulation.Simulation) int {
 	// The total of a box is equal to 100 times its distance from the top edge of the map plus its distance from the left edge of the map
 	total := 0
+	fmt.Println("Calculating Total")
 	for _, entity := range sim.GetEntities() {
 		if entity.GetEntityType() == BoxEntityType {
-			topEdge := entity.GetPosition().Y + 1
-			leftEdge := entity.GetPosition().X + 1
-			total += (100 * topEdge) + leftEdge
+			coords := entity.GetPosition()
+			var topEdge = sim.GetMap().GetHeight()
+			var leftEdge = sim.GetMap().GetWidth()
+			for _, coord := range coords {
+				topEdge = int(math.Min(float64(topEdge), float64(coord.Y))) + 1
+				leftEdge = int(math.Min(float64(leftEdge), float64(coord.X))) + 1
+			}
+			fmt.Printf("Top Edge and Left Edge for Entity ID %s is %d, %d\n", entity.GetId().String(), topEdge, leftEdge)
+			subtotal := (100 * topEdge) + leftEdge
+			fmt.Printf("Subtotal for Entity ID %s, Position: %v, Subtotal: %d\n", entity.GetId().String(), entity.GetPosition(), subtotal)
+			total += subtotal
 		}
 	}
 	return total
