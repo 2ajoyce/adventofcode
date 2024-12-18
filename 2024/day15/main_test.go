@@ -151,3 +151,81 @@ func TestMainLarge(t *testing.T) {
 	expectedContent := fmt.Sprintf("Total: %d", total)
 	validateOutput(t, expectedContent)
 }
+
+func TestMainSmallReddit(t *testing.T) {
+	// Set up the input data
+	inputData := []string{
+		"##########\n",
+		"#...OO..O#\n",
+		"#O.O.O.OO#\n",
+		"#......O.#\n",
+		"#..OO.OO.#\n",
+		"#..OO@.O.#\n",
+		"#O.....OO#\n",
+		"#..O.....#\n",
+		"#.O.O..OO#\n",
+		"##########\n",
+		"\n",
+		"<^^v<^<vv^^^vv<v>^<<\n",
+	}
+	const total = 11042
+	os.WriteFile(INPUT_FILE, []byte(strings.Join(inputData, "")), 0644)
+
+	// Run the main function
+	main()
+
+	expectedContent := fmt.Sprintf("Total: %d", total)
+	validateOutput(t, expectedContent)
+}
+
+func TestMainSmallReddit2(t *testing.T) {
+	// Set up the input data
+	inputData := []string{
+		"##########\n",
+		"#....#.O.#\n",
+		"#.O.O..#.#\n",
+		"#...OOO.O#\n",
+		"#.#.#....#\n",
+		"##O..@.#.#\n",
+		"#..OOO.OO#\n",
+		"#..OOOOO.#\n",
+		"#.....#O.#\n",
+		"##########\n",
+		"\n",
+		"<^<<>v^><<><>><v>>^^^>>v^vv><>>vv^><v>^>\n",
+	}
+	const total = 9796
+	os.WriteFile(INPUT_FILE, []byte(strings.Join(inputData, "")), 0644)
+
+	// Run the main function
+	main()
+
+	expectedContent := fmt.Sprintf("Total: %d", total)
+	validateOutput(t, expectedContent)
+}
+
+func TestMainLargeReddit(t *testing.T) {
+	// Set up the input data
+	inputData := []string{
+		"##########\n",
+		"#.O...O#.#\n",
+		"#O.O.....#\n",
+		"#O...O..O#\n",
+		"#O.O.O.O.#\n",
+		"#O.OO@O..#\n",
+		"#OOO.#O.##\n",
+		"#....OO.O#\n",
+		"#O......O#\n",
+		"##########\n",
+		"\n",
+		"<v<vv>^>v>^^^vv>^v^<^<^>^^^><v^<^<>v>>^<v^<v<><<<^v^<v>^v>>v<>>^>vvv<v>><>^vv<>v<<v<v<<^^^v^v<^<>v>^>vv^<vvv><^>vv^^><>><<>><>^^^>>>^<><><>vv><^<<>^vvvv><<^>^>>>vv>><>vvv^^^^^<<>^v<v^>><>v<v<>^>v>^<<v\n",
+	}
+	const total = 11096
+	os.WriteFile(INPUT_FILE, []byte(strings.Join(inputData, "")), 0644)
+
+	// Run the main function
+	main()
+
+	expectedContent := fmt.Sprintf("Total: %d", total)
+	validateOutput(t, expectedContent)
+}
