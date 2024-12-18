@@ -502,7 +502,8 @@ func (s *simulation) MoveEntity(entityId uuid.UUID, wrapping bool) error {
 
 	var newCoords []Coord
 	for _, coord := range entity.GetPosition() {
-		newCoord := coord.Move(entity.GetDirection())
+		newCoord := Coord{coord.X, coord.Y}
+		newCoord = newCoord.Move(entity.GetDirection())
 
 		if wrapping {
 			// Wrap the new coordinates so that when entities leave the map they re-enter on the other side.

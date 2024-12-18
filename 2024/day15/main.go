@@ -143,7 +143,7 @@ func parseLines(lines []string) (simulation.Simulation, []simulation.Direction, 
 	height := blankLineNum - 2
 	sim := simulation.NewSimulation(width, height)
 	for y := 1; y <= height; y++ {
-		for x := 3; x <= width; x++ {
+		for x := 3; x <= width+1; x++ {
 			entityType := string(transformedLines[y][x])
 			if entityType == "." {
 				continue
@@ -251,7 +251,6 @@ func solve1(sim simulation.Simulation, actions []simulation.Direction, workerCou
 		if err != nil {
 			return nil, fmt.Errorf("error checking if fish can move: %v", err)
 		}
-		fmt.Println(PrintSim(sim))
 		if !canMove {
 			if DEBUG {
 				fmt.Printf("Cannot move fish. Skipping action %v\n", direction)
@@ -270,15 +269,17 @@ func solve1(sim simulation.Simulation, actions []simulation.Direction, workerCou
 			if DEBUG {
 				fmt.Printf("Did not move fish. Skipping action %v\n", direction)
 			}
-			continue // If we didn't move, continue to the next action
+			return nil, fmt.Errorf("fish could move %v at %s, but did not move. This should never occur", direction, fish.GetPosition()[0].String())
 		}
 
+		fish, err = sim.GetEntity(fish.GetId())
+		if err != nil {
+			fmt.Printf("Error getting fish: %v\n", err)
+		}
 		if DEBUG {
-			fish, err = sim.GetEntity(fish.GetId())
-			if err != nil {
-				fmt.Printf("Error getting fish: %v\n", err)
-			}
 			fmt.Printf("Moved fish to %v\n", fish.GetPosition())
+		}
+		if DEBUG {
 			fmt.Printf("%s\n", PrintSim(sim))
 		}
 	}
@@ -330,9 +331,9 @@ const MAX_RECURSION_DEPTH = 1000
 // This recursive function will check if an object can move
 func canEntityMove(sim simulation.Simulation, entity simulation.Entity, direction simulation.Direction, depth int) (bool, error) {
 	DEBUG := os.Getenv("DEBUG") == "true"
-	if depth > MAX_RECURSION_DEPTH {
-		return false, fmt.Errorf("depth exceeded")
-	}
+	// if depth > MAX_RECURSION_DEPTH {
+	// 	return false, fmt.Errorf("depth exceeded")
+	// }
 	canMove := true
 	switch entity.GetEntityType() {
 	case ObstacleEntityType:
@@ -394,9 +395,9 @@ func canEntityMove(sim simulation.Simulation, entity simulation.Entity, directio
 // This recursive function will move an object
 func moveEntity(sim simulation.Simulation, entity simulation.Entity, direction simulation.Direction, depth int) (bool, error) {
 	DEBUG := os.Getenv("DEBUG") == "true"
-	if depth > MAX_RECURSION_DEPTH {
-		return false, fmt.Errorf("max recursion depth reached for entity %v at position %v", entity.GetEntityType(), entity.GetPosition())
-	}
+	// if depth > MAX_RECURSION_DEPTH {
+	// 	return false, fmt.Errorf("max recursion depth reached for entity %v at position %v", entity.GetEntityType(), entity.GetPosition())
+	// }
 	switch entity.GetEntityType() {
 	case ObstacleEntityType:
 		if DEBUG {
@@ -432,7 +433,8 @@ func moveEntity(sim simulation.Simulation, entity simulation.Entity, direction s
 			}
 			success, err := moveEntity(sim, e, direction, depth+1)
 			if err != nil {
-				return false, fmt.Errorf("error moving entity %v", e)
+				return false, fmt.Errorf("error in moveEntity for entity type %s at position: %v", e.GetEntityType(), e.GetPosition())
+
 			}
 			if !success {
 				return false, nil // If any entity can not move, return false
@@ -441,11 +443,12 @@ func moveEntity(sim simulation.Simulation, entity simulation.Entity, direction s
 		// If every location is valid and every entity in those locations can move
 		err = sim.SetEntityDirection(entity.GetId(), direction)
 		if err != nil {
-			return false, fmt.Errorf("error setting direction for entity %v", entity)
+			return false, fmt.Errorf("error setting direction for entity %s at position %v", entity.GetEntityType(), entity.GetPosition())
 		}
 		err = sim.MoveEntity(entity.GetId(), false)
 		if err != nil {
-			return false, fmt.Errorf("error moving entity %v", entity)
+			return false, fmt.Errorf("error in MoveEntity for entity %s at position %v", entity.GetEntityType(), entity.GetPosition())
+
 		}
 	}
 	return true, nil
@@ -458,16 +461,17 @@ func calculateTotal(sim simulation.Simulation) int {
 	for _, entity := range sim.GetEntities() {
 		if entity.GetEntityType() == BoxEntityType {
 			coords := entity.GetPosition()
-			var topEdge = sim.GetMap().GetHeight()
-			var leftEdge = sim.GetMap().GetWidth()
+			var topEdge = 100_000_000_000
+			var leftEdge = 100_000_000_000
 			for _, coord := range coords {
 				topEdge = int(math.Min(float64(topEdge), float64(coord.Y))) + 1
-				leftEdge = int(math.Min(float64(leftEdge), float64(coord.X))) + 1
+				leftEdge = int(math.Min(float64(leftEdge), float64(coord.X))) + 2
 			}
 			fmt.Printf("Top Edge and Left Edge for Entity ID %s is %d, %d\n", entity.GetId().String(), topEdge, leftEdge)
 			subtotal := (100 * topEdge) + leftEdge
 			fmt.Printf("Subtotal for Entity ID %s, Position: %v, Subtotal: %d\n", entity.GetId().String(), entity.GetPosition(), subtotal)
 			total += subtotal
+			fmt.Println()
 		}
 	}
 	return total

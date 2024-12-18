@@ -70,7 +70,7 @@ func TestMainSmall(t *testing.T) {
 	// #...O..#
 	// #...O..#
 	// ########
-	const total = 1745
+	const total = 1751
 	os.WriteFile(INPUT_FILE, []byte(strings.Join(inputData, "")), 0644)
 
 	// Run the main function
@@ -93,7 +93,10 @@ func TestMainDoubleBox(t *testing.T) {
 		"\n",
 		"<vv<<^^<<^^\n",
 	}
-	const total = 615
+	// 	100 * 1 + 5 = 105
+	// 100 * 2 + 7 = 207
+	// 100 * 3 + 6 = 306
+	const total = 618
 	os.WriteFile(INPUT_FILE, []byte(strings.Join(inputData, "")), 0644)
 
 	// Run the main function
@@ -139,7 +142,7 @@ func TestMainLarge(t *testing.T) {
 	// #O.....OO#
 	// #OO....OO#
 	// ##########
-	const total = 10092
+	const total = 9021
 	os.WriteFile(INPUT_FILE, []byte(strings.Join(inputData, "")), 0644)
 
 	// Run the main function
