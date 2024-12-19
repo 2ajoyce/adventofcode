@@ -138,11 +138,11 @@ func parseLines(lines []string) (simulation.Simulation, []simulation.Direction, 
 	// Lines above the blank line are the map, Lines below the blank line are the series of actions to perform
 	// Skip the first line as it represents the north wall of the map
 	// Skip the first 2 and last 2 characters of each line as they represent the walls of the mam
-	width := len(transformedLines[1]) - 5
-	height := blankLineNum - 2
+	width := len(transformedLines[0])
+	height := blankLineNum
 	sim := simulation.NewSimulation(width, height)
-	for y := 1; y <= height; y++ {
-		for x := 3; x <= width+1; x++ {
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
 			entityType := string(transformedLines[y][x])
 			if entityType == "." {
 				continue
@@ -151,7 +151,7 @@ func parseLines(lines []string) (simulation.Simulation, []simulation.Direction, 
 			if err != nil {
 				return nil, nil, fmt.Errorf("error creating fish entity: %v", err)
 			}
-			coords := []simulation.Coord{{X: x - 2, Y: y - 1}}
+			coords := []simulation.Coord{{X: x, Y: y}}
 			if entityType == LeftBoxEntityType {
 				continue // Skip the left box, add it when the right half is parsed
 			}
@@ -160,7 +160,7 @@ func parseLines(lines []string) (simulation.Simulation, []simulation.Direction, 
 				if err != nil {
 					return nil, nil, fmt.Errorf("error creating box entity: %v", err)
 				}
-				coords = append(coords, simulation.Coord{X: x - 3, Y: y - 1})
+				coords = append(coords, simulation.Coord{X: x - 1, Y: y})
 			}
 			sim.AddEntity(entity, coords, simulation.North)
 		}
@@ -444,6 +444,7 @@ func moveEntity(sim simulation.Simulation, entity simulation.Entity, direction s
 }
 
 func calculateTotal(sim simulation.Simulation) int {
+	DEBUG := os.Getenv("DEBUG") == "true"
 	total := 0
 	fmt.Println("Calculating Total")
 	for _, entity := range sim.GetEntities() {
@@ -453,16 +454,21 @@ func calculateTotal(sim simulation.Simulation) int {
 			var leftEdge = 100_000_000_000
 			var rightEdge = 0
 			for _, coord := range coords {
-				topEdge = int(math.Min(float64(topEdge), float64(coord.Y))) + 1
-				leftEdge = int(math.Min(float64(leftEdge), float64(coord.X))) + 2
-				rightEdge = int(math.Max(float64(rightEdge), float64(coord.X))) + 2
+				topEdge = int(math.Min(float64(topEdge), float64(coord.Y)))
+				leftEdge = int(math.Min(float64(leftEdge), float64(coord.X)))
+				rightEdge = int(math.Max(float64(rightEdge), float64(coord.X)))
 			}
-			rightEdge = sim.GetMap().GetWidth() + 5 - rightEdge // Not needed, but keeping because it helps with debugging
-			fmt.Printf("Entity ID: %s, Top Edge: %d, Left Edge: %d, Right Edge: %d\n", entity.GetId().String(), topEdge, leftEdge, rightEdge)
+
 			subtotal := (100 * topEdge) + leftEdge
-			fmt.Printf("Subtotal for Entity ID %s, Position: %v, Subtotal: %d\n", entity.GetId().String(), entity.GetPosition(), subtotal)
 			total += subtotal
-			fmt.Println()
+
+			if DEBUG {
+				rightEdge = sim.GetMap().GetWidth() - rightEdge // Not needed, but keeping because it helps with debugging
+				fmt.Printf("Entity ID: %s, Top Edge: %d, Left Edge: %d, Right Edge: %d\n", entity.GetId().String(), topEdge, leftEdge, rightEdge)
+				fmt.Printf("Entity ID: %s, Position: %v, Subtotal: %d\n", entity.GetId().String(), entity.GetPosition(), subtotal)
+				fmt.Printf("Entity ID: %s, Position: %v, Total: %d\n", entity.GetId().String(), entity.GetPosition(), total)
+				fmt.Println()
+			}
 		}
 	}
 	return total
