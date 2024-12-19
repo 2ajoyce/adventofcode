@@ -298,7 +298,7 @@ func TestMainReddit7(t *testing.T) {
 		"#......#\n",
 		"#..O...#\n",
 		"#.O....#\n",
-		"#..O...#n",
+		"#..O...#\n",
 		"#@O....#\n",
 		"#......#\n",
 		"########\n",
@@ -352,7 +352,7 @@ func TestMainReddit9(t *testing.T) {
 		"\n",
 		"<v<<>vv<^^\n",
 	}
-	const total = 322
+	const total = 822
 	os.WriteFile(INPUT_FILE, []byte(strings.Join(inputData, "")), 0644)
 
 	// Run the main function

@@ -215,7 +215,6 @@ func PrintSim(sim simulation.Simulation) string {
 	return output
 }
 
-
 func solve(sim simulation.Simulation, actions []simulation.Direction) ([]string, error) {
 	DEBUG := os.Getenv("DEBUG") == "true"
 	var output []string
@@ -452,11 +451,14 @@ func calculateTotal(sim simulation.Simulation) int {
 			coords := entity.GetPosition()
 			var topEdge = 100_000_000_000
 			var leftEdge = 100_000_000_000
+			var rightEdge = 0
 			for _, coord := range coords {
 				topEdge = int(math.Min(float64(topEdge), float64(coord.Y))) + 1
 				leftEdge = int(math.Min(float64(leftEdge), float64(coord.X))) + 2
+				rightEdge = int(math.Max(float64(rightEdge), float64(coord.X))) + 2
 			}
-			fmt.Printf("Top Edge and Left Edge for Entity ID %s is %d, %d\n", entity.GetId().String(), topEdge, leftEdge)
+			rightEdge = sim.GetMap().GetWidth() + 5 - rightEdge // Not needed, but keeping because it helps with debugging
+			fmt.Printf("Entity ID: %s, Top Edge: %d, Left Edge: %d, Right Edge: %d\n", entity.GetId().String(), topEdge, leftEdge, rightEdge)
 			subtotal := (100 * topEdge) + leftEdge
 			fmt.Printf("Subtotal for Entity ID %s, Position: %v, Subtotal: %d\n", entity.GetId().String(), entity.GetPosition(), subtotal)
 			total += subtotal
