@@ -28,6 +28,51 @@ type Direction struct {
 	VX, VY int
 }
 
+func (d Direction) String() string {
+	// Turn the direction into a string
+	switch d {
+	case North:
+		return "North"
+	case East:
+		return "East"
+	case South:
+		return "South"
+	case West:
+		return "West"
+	}
+	return "Unknown Direction" // Default case should not be reached if directions are correct
+}
+
+func (d Direction) TurnLeft() Direction {
+	switch d {
+	case North:
+		return West
+	case East:
+		return North
+	case South:
+		return East
+	case West:
+		return South
+	default:
+		panic("invalid direction")
+	}
+}
+
+func (d Direction) TurnRight() Direction {
+	switch d {
+	case North:
+		return East
+	case East:
+		return South
+	case South:
+		return West
+	case West:
+		return North
+	default:
+		panic("invalid direction")
+	}
+}
+
 // Define the four cardinal directions
 var (
 	North = Direction{VX: 0, VY: -1}

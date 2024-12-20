@@ -7,6 +7,64 @@ import (
 	"github.com/google/uuid"
 )
 
+func TestDirectionString(t *testing.T) {
+	tests := []struct {
+		direction Direction
+		expected  string
+	}{
+		{North, "North"},
+		{East, "East"},
+		{South, "South"},
+		{West, "West"},
+		{Direction{VX: 2, VY: 2}, "Unknown Direction"},
+	}
+
+	for _, test := range tests {
+		result := test.direction.String()
+		if result != test.expected {
+			t.Errorf("Expected %s, but got %s", test.expected, result)
+		}
+	}
+}
+
+func TestDirectionTurnLeft(t *testing.T) {
+	tests := []struct {
+		direction Direction
+		expected  Direction
+	}{
+		{North, West},
+		{West, South},
+		{South, East},
+		{East, North},
+	}
+
+	for _, test := range tests {
+		result := test.direction.TurnLeft()
+		if result != test.expected {
+			t.Errorf("Expected %v, but got %v", test.expected, result)
+		}
+	}
+}
+
+func TestDirectionTurnRight(t *testing.T) {
+	tests := []struct {
+		direction Direction
+		expected  Direction
+	}{
+		{North, East},
+		{East, South},
+		{South, West},
+		{West, North},
+	}
+
+	for _, test := range tests {
+		result := test.direction.TurnRight()
+		if result != test.expected {
+			t.Errorf("Expected %v, but got %v", test.expected, result)
+		}
+	}
+}
+
 func TestSpatialMapCellClone(t *testing.T) {
 	originalCell := NewSpatialMapCell()
 
