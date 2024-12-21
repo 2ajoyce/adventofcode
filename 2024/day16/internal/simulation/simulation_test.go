@@ -2,6 +2,7 @@ package simulation
 
 import (
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/google/uuid"
@@ -522,6 +523,88 @@ func TestAddMultiCellEntityWithInvalidCoords(t *testing.T) {
 			if len(cell.GetEntityIds()) != 0 {
 				t.Fatalf("Cell at %s contains entity despite invalid addition: %v", coord.String(), cell.GetEntityIds())
 			}
+		}
+	}
+}
+func TestGetNeighbors(t *testing.T) {
+	sm := NewSpatialMap(10, 10)
+
+	tests := []struct {
+		coord    Coord
+		expected []Coord
+	}{
+		{
+			Coord{X: 5, Y: 5},
+			[]Coord{
+				{X: 5, Y: 4}, // North
+				{X: 6, Y: 5}, // East
+				{X: 5, Y: 6}, // South
+				{X: 4, Y: 5}, // West
+			},
+		},
+		{
+			Coord{X: 0, Y: 0},
+			[]Coord{
+				{X: 1, Y: 0}, // East
+				{X: 0, Y: 1}, // South
+			},
+		},
+		{
+			Coord{X: 9, Y: 9},
+			[]Coord{
+				{X: 9, Y: 8}, // North
+				{X: 8, Y: 9}, // West
+			},
+		},
+		{
+			Coord{X: 0, Y: 9},
+			[]Coord{
+				{X: 0, Y: 8}, // North
+				{X: 1, Y: 9}, // East
+			},
+		},
+		{
+			Coord{X: 9, Y: 0},
+			[]Coord{
+				{X: 9, Y: 1}, // South
+				{X: 8, Y: 0}, // West
+			},
+		},
+	}
+
+	for _, test := range tests {
+		result := sm.GetNeighbors(test.coord)
+		if len(result) != len(test.expected) {
+			t.Fatalf("Expected %d neighbors, but got %d", len(test.expected), len(result))
+		}
+
+		for _, coord := range result {
+			if !slices.Contains(test.expected, coord) {
+				t.Errorf("Unexpected neighbor %v", coord)
+			}
+		}
+	}
+}
+func TestDirectionTo(t *testing.T) {
+	tests := []struct {
+		start    Coord
+		target   Coord
+		expected Direction
+	}{
+		{Coord{X: 0, Y: 0}, Coord{X: 1, Y: 0}, East},
+		{Coord{X: 0, Y: 0}, Coord{X: -1, Y: 0}, West},
+		{Coord{X: 0, Y: 0}, Coord{X: 0, Y: 1}, South},
+		{Coord{X: 0, Y: 0}, Coord{X: 0, Y: -1}, North},
+		{Coord{X: 1, Y: 1}, Coord{X: 2, Y: 1}, East},
+		{Coord{X: 1, Y: 1}, Coord{X: 0, Y: 1}, West},
+		{Coord{X: 1, Y: 1}, Coord{X: 1, Y: 2}, South},
+		{Coord{X: 1, Y: 1}, Coord{X: 1, Y: 0}, North},
+	}
+
+	for _, test := range tests {
+		result := test.start.DirectionTo(test.target)
+		if result != test.expected {
+			t.Errorf("Expected %v, but got %v for start %v and target %v", test.expected, result, test.start, test.target)
 		}
 	}
 }

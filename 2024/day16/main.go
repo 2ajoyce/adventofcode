@@ -115,12 +115,12 @@ func PrintSim(sim simulation.Simulation, path []simulation.Coord) string {
 				continue
 			}
 			if slices.Contains(path, simulation.Coord{X: x, Y: y}) {
-				output += "X"
+				output += "O"
 				continue
 			}
 			ids := cell.GetEntityIds()
 			if len(ids) == 0 {
-				output += "."
+				output += " "
 			} else {
 				entity, err := sim.GetEntity(ids[0])
 				if err != nil {
@@ -161,18 +161,26 @@ func solve(sim simulation.Simulation, WORKER_COUNT int) ([]string, error) {
 		fmt.Printf("Ending Location: %s\n", endLocation.String())
 	}
 
-	path, steps, turns, err := bfs(sim, startLocation, endLocation)
+	path, cost, _, err := simulation.Dijkstra(sim, startLocation, endLocation, CostCustom)
 	if err != nil {
 		return output, err
 	}
 
-	total := calculateTotal(steps, turns)
 	if DEBUG {
 		fmt.Println(PrintSim(sim, path))
 	}
-	fmt.Println("Total:", total)
-	output = append(output, fmt.Sprintf("Total: %d", total))
+	fmt.Println("Total:", cost)
+	output = append(output, fmt.Sprintf("Total: %.0f", cost))
 	return output, nil
+}
+
+func CostCustom(dir simulation.Direction, from, to simulation.Coord) float64 {
+	// If the direction is different from the previous direction, add 1000 to the cost
+	if from.DirectionTo(to).VX != dir.VX && from.DirectionTo(to).VY != dir.VY {
+		return 1000 + simulation.CostManhattan(dir, from, to)
+	}
+
+	return simulation.CostManhattan(dir, from, to)
 }
 
 func findStart(sim simulation.Simulation) simulation.Entity {
@@ -191,84 +199,4 @@ func findEnd(sim simulation.Simulation) simulation.Entity {
 		}
 	}
 	return nil
-}
-
-func calculateTotal(steps int, turns int) int {
-	DEBUG := os.Getenv("DEBUG") == "true"
-	total := 0
-	if DEBUG {
-		fmt.Println("Calculating Total")
-	}
-	total += steps
-	total += turns * 1000
-	return total
-}
-
-func bfs(sim simulation.Simulation, start, end simulation.Coord) ([]simulation.Coord, int, int, error) {
-	directions := []simulation.Direction{simulation.North, simulation.East, simulation.South, simulation.West}
-	queue := []simulation.Coord{start}
-	visited := make(map[simulation.Coord]bool)
-	parent := make(map[simulation.Coord]*simulation.Coord)
-	directionMap := make(map[simulation.Coord]simulation.Direction)
-
-	visited[start] = true
-	directionMap[start] = simulation.North // Assume starting direction is North
-
-	steps := 0
-	turns := 0
-
-	for len(queue) > 0 {
-		current := queue[0]
-		queue = queue[1:]
-
-		if current == end {
-			path := reconstructPath(parent, start, end)
-			return path, steps, turns, nil
-		}
-
-		for _, dir := range directions {
-			neighbor := current.Move(dir)
-			if isValid(sim, neighbor) && !visited[neighbor] {
-				queue = append(queue, neighbor)
-				visited[neighbor] = true
-				parent[neighbor] = &current
-				directionMap[neighbor] = dir
-
-				steps++
-				if directionMap[current] != dir {
-					turns++
-				}
-			}
-		}
-	}
-
-	return nil, 0, 0, errors.New("no path found")
-}
-
-func isValid(sim simulation.Simulation, pos simulation.Coord) bool {
-	width := sim.GetMap().GetWidth()
-	height := sim.GetMap().GetHeight()
-	if pos.X < 0 || pos.X >= width || pos.Y < 0 || pos.Y >= height {
-		return false
-	}
-	cell, err := sim.GetMap().GetCell(pos)
-	if err != nil {
-		return false
-	}
-	ids := cell.GetEntityIds()
-	for _, id := range ids {
-		entity, _ := sim.GetEntity(id)
-		if entity.GetEntityType() == ObstacleEntityType {
-			return false
-		}
-	}
-	return true
-}
-
-func reconstructPath(parent map[simulation.Coord]*simulation.Coord, start, end simulation.Coord) []simulation.Coord {
-	var path []simulation.Coord
-	for at := &end; at != nil; at = parent[*at] {
-		path = append([]simulation.Coord{*at}, path...)
-	}
-	return path
 }

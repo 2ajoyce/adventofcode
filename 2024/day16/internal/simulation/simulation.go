@@ -24,6 +24,22 @@ func (c *Coord) Move(d Direction) Coord {
 	return Coord{X: c.X + d.VX, Y: c.Y + d.VY}
 }
 
+// DirectionTo returns the direction from one coordinate to another
+func (c *Coord) DirectionTo(coord Coord) Direction {
+	dx := coord.X - c.X
+	dy := coord.Y - c.Y
+	if dx > 0 {
+		return East
+	} else if dx < 0 {
+		return West
+	} else if dy > 0 {
+		return South
+	} else if dy < 0 {
+		return North
+	}
+	return Direction{VX: 0, VY: 0}
+}
+
 type Direction struct {
 	VX, VY int
 }
@@ -54,7 +70,7 @@ func (d Direction) TurnLeft() Direction {
 	case West:
 		return South
 	default:
-		panic("invalid direction")
+		return d
 	}
 }
 
@@ -69,7 +85,7 @@ func (d Direction) TurnRight() Direction {
 	case West:
 		return North
 	default:
-		panic("invalid direction")
+		return d
 	}
 }
 
@@ -183,6 +199,7 @@ type SpatialMap interface {
 	GetHeight() int
 	GetWidth() int
 	GetIndex(coord Coord) int
+	GetNeighbors(coord Coord) []Coord
 	removeEntity(entityId uuid.UUID, coords ...Coord) error // Mutation functions are private
 	addEntity(entityId uuid.UUID, coords ...Coord) error    // Renamed from setEntity
 	ValidateCoord(coord Coord) bool
@@ -293,6 +310,24 @@ func (m *spatialMap) removeEntity(entityId uuid.UUID, coords ...Coord) error {
 	cellErr := errors.Join(cellErrs...)
 	rollbackErr := errors.Join(rollbackErrs...)
 	return errors.Join(cellErr, rollbackErr)
+}
+
+func (m *spatialMap) GetNeighbors(coord Coord) []Coord {
+	neighbors := []Coord{
+		coord.Move(North),
+		coord.Move(East),
+		coord.Move(South),
+		coord.Move(West),
+	}
+
+	validNeighbors := []Coord{}
+	for _, neighbor := range neighbors {
+		if m.ValidateCoord(neighbor) {
+			validNeighbors = append(validNeighbors, neighbor)
+		}
+	}
+
+	return validNeighbors
 }
 
 func (m *spatialMap) clone() *spatialMap {
