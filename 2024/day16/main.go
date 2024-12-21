@@ -161,26 +161,62 @@ func solve(sim simulation.Simulation, WORKER_COUNT int) ([]string, error) {
 		fmt.Printf("Ending Location: %s\n", endLocation.String())
 	}
 
-	path, cost, _, err := simulation.Dijkstra(sim, startLocation, endLocation, CostCustom)
-	if err != nil {
-		return output, err
+	priorCoord := startTile.GetPosition()[0]
+	graph := make(map[simulation.Coord]map[simulation.Coord]float64)
+	// Create the graph to solve
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			neighborsMap := make(map[simulation.Coord]float64)
+			coord := simulation.Coord{X: x, Y: y}
+			for _, neighbor := range sim.GetMap().GetNeighbors(coord) {
+				if !sim.GetMap().ValidateCoord(neighbor) {
+					continue // Skip invalid coordinates
+				}
+				neighborCell, err := sim.GetMap().GetCell(neighbor)
+				if err != nil {
+					return nil, fmt.Errorf("error getting neighbor cell: %v", err)
+				}
+				if len(neighborCell.GetEntityIds()) > 0 {
+					neighborEntity, err := sim.GetEntity(neighborCell.GetEntityIds()[0])
+					if err != nil {
+						return nil, fmt.Errorf("error getting neighbor entity: %v", err)
+					}
+					if neighborEntity.GetEntityType() == ObstacleEntityType {
+						continue // Skip obstacles
+					}
+				}
+				neighborsMap[neighbor] = cost(priorCoord, coord, neighbor)
+			}
+			graph[coord] = neighborsMap
+		}
 	}
 
+	paths, cost := simulation.ModifiedBFS(graph, startLocation, endLocation)
+
 	if DEBUG {
-		fmt.Println(PrintSim(sim, path))
+		fmt.Printf("Found %d paths\n", len(paths))
+		for _, path := range paths {
+			coords := make([]simulation.Coord, len(path))
+			for _, step := range path {
+				coords = append(coords, step.Node)
+			}
+			fmt.Println(PrintSim(sim, coords))
+		}
 	}
 	fmt.Println("Total:", cost)
 	output = append(output, fmt.Sprintf("Total: %.0f", cost))
 	return output, nil
 }
 
-func CostCustom(dir simulation.Direction, from, to simulation.Coord) float64 {
+func cost(prior, current, next simulation.Coord) float64 {
+	priorDirection := prior.DirectionTo(current)
+	nextDirection := current.DirectionTo(next)
 	// If the direction is different from the previous direction, add 1000 to the cost
-	if from.DirectionTo(to).VX != dir.VX && from.DirectionTo(to).VY != dir.VY {
-		return 1000 + simulation.CostManhattan(dir, from, to)
+	if priorDirection != nextDirection {
+		return 1000 + simulation.CostManhattan(current, next)
 	}
 
-	return simulation.CostManhattan(dir, from, to)
+	return simulation.CostManhattan(current, next)
 }
 
 func findStart(sim simulation.Simulation) simulation.Entity {

@@ -65,7 +65,7 @@ func TestMainSmall1(t *testing.T) {
 		"#S..#.....#...#\n",
 		"###############\n",
 	}
-	const total = 7036
+	const total = 45
 	os.WriteFile(INPUT_FILE, []byte(strings.Join(inputData, "")), 0644)
 
 	// Run the main function
@@ -95,7 +95,7 @@ func TestMainSmall2(t *testing.T) {
 		"#S#.............#\n",
 		"#################\n",
 	}
-	const total = 11048
+	const total = 64
 	os.WriteFile(INPUT_FILE, []byte(strings.Join(inputData, "")), 0644)
 
 	// Run the main function
@@ -162,7 +162,7 @@ func TestMainReddit2(t *testing.T) {
 		"#S...................#.............................#\n",
 		"####################################################\n",
 	}
-	const total = 5078 // Part 2: 413
+	const total = 413
 	os.WriteFile(INPUT_FILE, []byte(strings.Join(inputData, "")), 0644)
 
 	// Run the main function
@@ -185,7 +185,7 @@ func TestMainReddit3(t *testing.T) {
 		"#S...#.........#.........#.........#.........#.........#\n",
 		"########################################################\n",
 	}
-	const total = 21110 // Part 2: 264
+	const total = 264
 	os.WriteFile(INPUT_FILE, []byte(strings.Join(inputData, "")), 0644)
 
 	// Run the main function
@@ -208,7 +208,7 @@ func TestMainReddit4(t *testing.T) {
 		"#S...#.........#.........#.........#.........#.........#.........#.........#.........#.........#.........#\n",
 		"##########################################################################################################\n",
 	}
-	const total = 41210 // Part 2: 514
+	const total = 514
 	os.WriteFile(INPUT_FILE, []byte(strings.Join(inputData, "")), 0644)
 
 	// Run the main function
@@ -228,7 +228,7 @@ func TestMainReddit5(t *testing.T) {
 		"#S.......#\n",
 		"##########\n",
 	}
-	const total = 4013 // Part 2: 14
+	const total = 14
 	os.WriteFile(INPUT_FILE, []byte(strings.Join(inputData, "")), 0644)
 
 	// Run the main function
