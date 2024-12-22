@@ -2,6 +2,7 @@ package simulation
 
 import (
 	"container/heap"
+	"fmt"
 	"math"
 )
 
@@ -20,9 +21,10 @@ type Path []PathStep
 
 // State represents a state in the priority queue for pathfinding.
 type State struct {
-	Cost float64
-	Node Coord
-	Path Path
+	Cost        float64
+	PriorNode   Coord
+	CurrentNode Coord
+	Path        Path
 }
 
 // PriorityQueue is a min-heap of States.
@@ -64,11 +66,11 @@ func Dijkstra(graph map[Coord]map[Coord]float64, start, target Coord, costFn fun
 		dist[node] = math.MaxInt
 	}
 	dist[start] = 0
-	heap.Push(pq, State{Cost: 0, Node: start, Path: Path{{Node: start, Cost: 0}}})
+	heap.Push(pq, State{Cost: 0, CurrentNode: start, Path: Path{{Node: start, Cost: 0}}}) // TODO: Update this to save the prior node
 
 	for pq.Len() > 0 {
 		state := heap.Pop(pq).(State)
-		currentNode := state.Node
+		currentNode := state.CurrentNode
 		currentCost := state.Cost
 
 		if currentNode == target {
@@ -82,7 +84,7 @@ func Dijkstra(graph map[Coord]map[Coord]float64, start, target Coord, costFn fun
 				prev[neighbor] = currentNode
 				newPath := append(Path{}, state.Path...)
 				newPath = append(newPath, PathStep{Node: neighbor, Cost: newCost})
-				heap.Push(pq, State{Cost: newCost, Node: neighbor, Path: newPath})
+				heap.Push(pq, State{Cost: newCost, CurrentNode: neighbor, Path: newPath}) // TODO: Update this to save the prior node
 			}
 		}
 	}
@@ -96,51 +98,100 @@ func Dijkstra(graph map[Coord]map[Coord]float64, start, target Coord, costFn fun
 // - graph: a map where keys are nodes (Coord) and values are maps of neighbors (Coord) and their weights.
 // - start: the starting node as a Coord.
 // - target: the target node as a Coord.
+// - costFunc: a custom cost function that calculates the cost of transitioning between nodes.
 //
 // Returns:
 // - A list of all optimal paths (each path as a Path struct).
 // - The total cost of the optimal paths.
-func ModifiedBFS(graph map[Coord]map[Coord]float64, start, target Coord) ([]Path, float64) {
-	dist := make(map[Coord]float64)
-	paths := make(map[Coord][]Path)
+func ModifiedBFS(graph map[Coord]map[Coord]float64, start, target Coord, costFunc func(prior, current, next Coord) float64) ([]Path, float64) {
+	dist := make(map[Coord]map[Coord]float64, len(graph)) // Map of current node to prior node and cost
+	paths := make(map[Coord]map[Coord][]Path)
 	pq := &PriorityQueue{}
 
 	heap.Init(pq)
-
 	for node := range graph {
-		dist[node] = math.MaxInt
-		paths[node] = []Path{}
+		dist[node] = make(map[Coord]float64, len(graph[node]))
+		paths[node] = make(map[Coord][]Path)
+		for neighbor := range graph[node] {
+			dist[node][neighbor] = math.MaxFloat64
+			paths[node][neighbor] = []Path{}
+		}
 	}
-	dist[start] = 0
-	paths[start] = []Path{{{Node: start, Cost: 0}}}
-	heap.Push(pq, State{Cost: 0, Node: start, Path: Path{{Node: start, Cost: 0}}})
+
+	dist[start][start] = 0
+	paths[start][start] = []Path{{{Node: start, Cost: 0}}}
+	heap.Push(pq, State{Cost: 0, PriorNode: start, CurrentNode: start, Path: Path{{Node: start, Cost: 0}}})
 
 	for pq.Len() > 0 {
 		state := heap.Pop(pq).(State)
-		currentNode := state.Node
+		priorNode := state.PriorNode
+		currentNode := state.CurrentNode
 		currentCost := state.Cost
 
-		for neighbor, weight := range graph[currentNode] {
-			newCost := currentCost + weight
+		if currentNode == target {
+			continue
+		}
 
-			if newCost < dist[neighbor] {
-				dist[neighbor] = newCost
-				paths[neighbor] = []Path{}
-				for _, path := range paths[currentNode] {
-					newPath := append(Path{}, path...)
-					newPath = append(newPath, PathStep{Node: neighbor, Cost: newCost})
-					paths[neighbor] = append(paths[neighbor], newPath)
+		for neighbor, weight := range graph[currentNode] {
+			newCost := currentCost + weight + costFunc(priorNode, currentNode, neighbor)
+
+			if newCost < dist[neighbor][currentNode] {
+				dist[neighbor][currentNode] = newCost
+				paths[neighbor][currentNode] = []Path{}
+				for _, pathByDirection := range paths[currentNode] {
+					for _, path := range pathByDirection {
+						newPath := append(Path{}, path...)
+						newPath = append(newPath, PathStep{Node: neighbor, Cost: newCost})
+						paths[neighbor][currentNode] = append(paths[neighbor][currentNode], newPath)
+					}
 				}
-				heap.Push(pq, State{Cost: newCost, Node: neighbor})
-			} else if newCost == dist[neighbor] {
-				for _, path := range paths[currentNode] {
-					newPath := append(Path{}, path...)
-					newPath = append(newPath, PathStep{Node: neighbor, Cost: newCost})
-					paths[neighbor] = append(paths[neighbor], newPath)
+				heap.Push(pq, State{Cost: newCost, PriorNode: currentNode, CurrentNode: neighbor})
+			} else if newCost == dist[neighbor][currentNode] {
+				for _, pathsByDirection := range paths[currentNode] {
+					for _, path := range pathsByDirection {
+						newPath := append(Path{}, path...)
+						newPath = append(newPath, PathStep{Node: neighbor, Cost: newCost})
+						paths[neighbor][currentNode] = append(paths[neighbor][currentNode], newPath)
+					}
 				}
 			}
 		}
 	}
 
-	return paths[target], dist[target]
+	allPathsToTarget := []Path{}
+	for _, pathByDirection := range paths[target] {
+		allPathsToTarget = append(allPathsToTarget, pathByDirection...)
+	}
+	fmt.Printf("Found %d paths to target\n", len(allPathsToTarget))
+
+	cheapestCost := math.MaxFloat64
+	for _, path := range allPathsToTarget {
+		for _, step := range path {
+			if step.Node == target && step.Cost < cheapestCost {
+				cheapestCost = step.Cost
+			}
+		}
+	}
+
+	cheapestPaths := []Path{}
+	for _, path := range allPathsToTarget {
+		cost := 0.0
+		priorStep := path[0]
+		for i, step := range path {
+			if i > 0 {
+				priorStep = path[i-1]
+			}
+			if step.Node == target {
+				break
+			}
+			cost += costFunc(priorStep.Node, step.Node, path[i+1].Node)
+		}
+		if cost == cheapestCost {
+			cheapestPaths = append(cheapestPaths, path)
+		}
+	}
+	if len(cheapestPaths) == 0 {
+		return cheapestPaths, -1
+	}
+	return cheapestPaths, cheapestCost
 }

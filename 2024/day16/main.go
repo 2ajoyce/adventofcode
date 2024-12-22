@@ -161,7 +161,6 @@ func solve(sim simulation.Simulation, WORKER_COUNT int) ([]string, error) {
 		fmt.Printf("Ending Location: %s\n", endLocation.String())
 	}
 
-	priorCoord := startTile.GetPosition()[0]
 	graph := make(map[simulation.Coord]map[simulation.Coord]float64)
 	// Create the graph to solve
 	for y := 0; y < height; y++ {
@@ -185,32 +184,39 @@ func solve(sim simulation.Simulation, WORKER_COUNT int) ([]string, error) {
 						continue // Skip obstacles
 					}
 				}
-				neighborsMap[neighbor] = cost(priorCoord, coord, neighbor)
+				neighborsMap[neighbor] = 0
 			}
 			graph[coord] = neighborsMap
 		}
 	}
 
-	paths, cost := simulation.ModifiedBFS(graph, startLocation, endLocation)
+	paths, cost := simulation.ModifiedBFS(graph, startLocation, endLocation, cost)
+	totalNodes := map[simulation.Coord]bool{}
 
 	if DEBUG {
 		fmt.Printf("Found %d paths\n", len(paths))
 		for _, path := range paths {
 			coords := make([]simulation.Coord, len(path))
-			for _, step := range path {
-				coords = append(coords, step.Node)
+			for i, step := range path {
+				coords[i] = step.Node
+				totalNodes[step.Node] = true
 			}
 			fmt.Println(PrintSim(sim, coords))
 		}
 	}
-	fmt.Println("Total:", cost)
-	output = append(output, fmt.Sprintf("Total: %.0f", cost))
+	fmt.Printf("Total Nodes:%d, Cost: %0.0f\n", len(totalNodes), cost)
+	output = append(output, fmt.Sprintf("Total: %d", len(totalNodes)))
 	return output, nil
 }
 
 func cost(prior, current, next simulation.Coord) float64 {
 	priorDirection := prior.DirectionTo(current)
 	nextDirection := current.DirectionTo(next)
+
+	if prior == current {
+		priorDirection = simulation.East
+	}
+
 	// If the direction is different from the previous direction, add 1000 to the cost
 	if priorDirection != nextDirection {
 		return 1000 + simulation.CostManhattan(current, next)
