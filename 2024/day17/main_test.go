@@ -6,7 +6,6 @@ import (
 	"math/big"
 	"os"
 	"strings"
-	"sync"
 	"testing"
 )
 
@@ -55,26 +54,11 @@ func TestSolveComputer1(t *testing.T) {
 	comp.SetRegisterA(big.NewInt(729))
 	comp.SetOpcodes([]day17.Opcode{0, 1, 5, 4, 3, 0})
 	expectedOutput := "4,6,3,5,6,3,5,2,1,0"
-	output := ""
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for out := range comp.Output {
-			output = output + fmt.Sprintf("%s,", out)
-		}
-		if len(output) > 0 {
-			output = strings.TrimSuffix(output, ",")
-		}
-	}()
-
-	err := SolveComputer(0, comp)
+	output, err := SolveComputer(0, comp)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-
-	wg.Wait()
 
 	if output != expectedOutput {
 		t.Errorf("Expected output to be '%s' but got: '%s'", expectedOutput, output)
@@ -86,27 +70,11 @@ func TestSolveComputer2(t *testing.T) {
 	comp.SetRegisterA(big.NewInt(10))
 	comp.SetOpcodes([]day17.Opcode{5, 0, 5, 1, 5, 4})
 	expectedOutput := "0,1,2"
-	output := ""
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for out := range comp.Output {
-			output = output + fmt.Sprintf("%s,", out)
-		}
-		// Remove the trailing comma
-		if len(output) > 0 {
-			output = strings.TrimSuffix(output, ",")
-		}
-	}()
-
-	err := SolveComputer(0, comp)
+	output, err := SolveComputer(0, comp)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-
-	wg.Wait()
 
 	if output != expectedOutput {
 		t.Errorf("Expected output to be '%s', but got: %s", expectedOutput, output)
@@ -118,27 +86,11 @@ func TestSolveComputer3(t *testing.T) {
 	comp.SetRegisterA(big.NewInt(2024))
 	comp.SetOpcodes([]day17.Opcode{0, 1, 5, 4, 3, 0})
 	expectedOutput := "4,2,5,6,7,7,7,7,3,1,0"
-	output := ""
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for out := range comp.Output {
-			output = output + fmt.Sprintf("%s,", out)
-		}
-		// Remove the trailing comma
-		if len(output) > 0 {
-			output = strings.TrimSuffix(output, ",")
-		}
-	}()
-
-	err := SolveComputer(0, comp)
+	output, err := SolveComputer(0, comp)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-
-	wg.Wait()
 
 	if output != expectedOutput {
 		t.Errorf("Expected output to be '%s', but got: %s", expectedOutput, output)
@@ -152,29 +104,50 @@ func TestSolveCanSolvePart2(t *testing.T) {
 	comp.SetRegisterA(big.NewInt(117440))
 	comp.SetOpcodes([]day17.Opcode{0, 3, 5, 4, 3, 0})
 	expectedOutput := "0,3,5,4,3,0"
-	output := ""
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for out := range comp.Output {
-			output = output + fmt.Sprintf("%s,", out)
-		}
-		// Remove the trailing comma
-		if len(output) > 0 {
-			output = strings.TrimSuffix(output, ",")
-		}
-	}()
-
-	err := SolveComputer(0, comp)
+	output, err := SolveComputer(0, comp)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	wg.Wait()
-
 	if output != expectedOutput {
 		t.Errorf("Expected output to be '%s', but got: %s", expectedOutput, output)
 	}
+}
+
+func TestMainPart2Example(t *testing.T) {
+	os.Setenv("DEBUG", "false")
+	inputData := []string{
+		"Register A: 2024\n",
+		"Register B: 0\n",
+		"Register C: 0\n",
+		"\n",
+		"Program: 0,3,5,4,3,0\n",
+	}
+	os.WriteFile(INPUT_FILE, []byte(strings.Join(inputData, "")), 0644)
+	total := 117440
+
+	main()
+
+	expectedContent := fmt.Sprintf("Lowest RegA Value: %d", total)
+	validateOutput(t, expectedContent)
+}
+
+func TestMainPart2ExampleParallel(t *testing.T) {
+	os.Setenv("DEBUG", "false")
+	os.Setenv("Parallelism", "5")
+	inputData := []string{
+		"Register A: 2024\n",
+		"Register B: 0\n",
+		"Register C: 0\n",
+		"\n",
+		"Program: 0,3,5,4,3,0\n",
+	}
+	os.WriteFile(INPUT_FILE, []byte(strings.Join(inputData, "")), 0644)
+	total := 117440
+
+	main()
+
+	expectedContent := fmt.Sprintf("Lowest RegA Value: %d", total)
+	validateOutput(t, expectedContent)
 }

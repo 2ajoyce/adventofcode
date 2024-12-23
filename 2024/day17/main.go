@@ -8,6 +8,9 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
+
+	"github.com/schollz/progressbar/v3"
 )
 
 func main() {
@@ -145,69 +148,64 @@ func solve(comp *day17.Computer, WORKER_COUNT int) ([]string, error) {
 	// Calculate the expected output based on the initial state of the computer
 	expectedOutput := ""
 	opcodes := comp.GetOpcodes()
-	for i, opcode := range opcodes {
-		expectedOutput = expectedOutput + fmt.Sprintf("%d", opcode)
+	for _, opcode := range opcodes {
+		expectedOutput = expectedOutput + fmt.Sprintf("%d,", opcode)
+	}
+	expectedOutput = strings.TrimSuffix(expectedOutput, ",")
 
-		if i == len(opcodes)-1 { // Add a comma after every opcode except the last one
-			expectedOutput = strings.TrimSuffix(expectedOutput, ",")
-		}
+	testRegAValue := big.NewInt(0)
+	var optimalRegAValue *big.Int = nil
+	bar := progressbar.Default(-1, "Solving")
+
+	// Create a channel to distribute tasks to workers
+	tasks := make(chan *big.Int, WORKER_COUNT)
+
+	var wg sync.WaitGroup
+
+	// Launch worker goroutines
+	for i := 0; i < WORKER_COUNT; i++ {
+		wg.Add(1)
+		go func(workerId int) {
+			defer wg.Done()
+			for regA := range tasks {
+				cloneComp := comp.Clone()
+				cloneComp.SetRegisterA(regA)
+
+				workerOutput, err := SolveComputer(workerId, cloneComp)
+				if err != nil {
+					panic(fmt.Errorf("unexpected error: %v", err))
+				}
+
+				if optimalRegAValue != nil {
+					break
+				}
+				if workerOutput == expectedOutput {
+					fmt.Printf("\nWorker %d found optimal RegA value: %s\n", workerId, regA)
+					optimalRegAValue = big.NewInt(0).Set(regA)
+				}
+			}
+		}(i)
 	}
 
-	regAValue := big.NewInt(0)
-	var successfulValue *big.Int
-	successfulValue = nil
-	workerId := 0
-
-	// Create a buffered channel to limit the number of concurrent goroutines
-	sem := make(chan struct{}, WORKER_COUNT)
-	results := make(chan *big.Int)
-
-	for successfulValue == nil {
-		sem <- struct{}{} // Acquire a slot
-
-		cloneComp := comp.Clone()
-		cloneComp.SetRegisterA(regAValue)
-
-		go func(cloneComp *day17.Computer, regAValue *big.Int) {
-			defer func() { <-sem }() // Release the slot
-
-			output := ""
-			for out := range cloneComp.Output {
-				output = output + fmt.Sprintf("%s,", out)
-			}
-			// Remove the trailing comma
-			if len(output) > 0 {
-				output = strings.TrimSuffix(output, ",")
-			}
-			if output == expectedOutput {
-				results <- regAValue
-			} else {
-				results <- nil
-			}
-		}(cloneComp, new(big.Int).Set(regAValue))
-
-		go SolveComputer(workerId, cloneComp) // This swallows the error returned by SolveComputer
-
-		regAValue.Add(regAValue, big.NewInt(1))
-		workerId++
-
-		select {
-		case successfulValue = <-results:
-			if successfulValue != nil {
-				break
-			}
-		default:
+	// Distribute tasks to workers
+	tasksDistributed := 0
+	go func() {
+		for optimalRegAValue == nil {
+			tasks <- new(big.Int).Set(testRegAValue)
+			testRegAValue.Add(testRegAValue, big.NewInt(1))
+			bar.Add(1)
+			tasksDistributed++
 		}
-	}
+		close(tasks)
+	}()
 
-	output := "Lowest RegA Value: " + successfulValue.String()
-	fmt.Println("Solve complete")
-	fmt.Printf("Final State: %s\n", comp)
+	wg.Wait()
+	output := fmt.Sprintf("Lowest RegA Value: %s", optimalRegAValue)
 	fmt.Println(output)
 	return []string{output}, nil
 }
 
-func SolveComputer(workerId int, comp *day17.Computer) error {
+func SolveComputer(workerId int, comp *day17.Computer) (string, error) {
 	DEBUG := os.Getenv("DEBUG") == "true"
 	if DEBUG {
 		fmt.Printf("Worker %d: Beginning solve\n", workerId)
@@ -219,6 +217,20 @@ func SolveComputer(workerId int, comp *day17.Computer) error {
 	opcodes := comp.GetOpcodes()
 	// Get the instruction pointer from the computer
 	ip := comp.GetInstructionPointer()
+
+	var workerOutput string
+	var workerWg sync.WaitGroup
+	workerWg.Add(1)
+	go func() {
+		defer workerWg.Done()
+		for out := range comp.Output {
+			workerOutput = workerOutput + fmt.Sprintf("%s,", out)
+		}
+		// Remove the trailing comma
+		if len(workerOutput) > 0 {
+			workerOutput = strings.TrimSuffix(workerOutput, ",")
+		}
+	}()
 
 	for ip < len(opcodes) {
 		// Get the opcode at the instruction pointer
@@ -235,7 +247,7 @@ func SolveComputer(workerId int, comp *day17.Computer) error {
 		// Get the function associated with the opcode
 		fn, err := opcode.GetInstruction()
 		if err != nil {
-			return fmt.Errorf("error in Worker %d: getting instruction for opcode %d at instruction pointer %d: %v", workerId, opcode, ip, err)
+			return "", fmt.Errorf("error in Worker %d: getting instruction for opcode %d at instruction pointer %d: %v", workerId, opcode, ip, err)
 		}
 
 		if DEBUG {
@@ -245,7 +257,7 @@ func SolveComputer(workerId int, comp *day17.Computer) error {
 		// Execute the function
 		err = fn(comp, opcodes[ip+1])
 		if err != nil {
-			return fmt.Errorf("error in Worker %d: executing opcode %d: %v", workerId, opcode, err)
+			return "", fmt.Errorf("error in Worker %d: executing opcode %d: %v", workerId, opcode, err)
 		}
 
 		if DEBUG {
@@ -260,7 +272,7 @@ func SolveComputer(workerId int, comp *day17.Computer) error {
 		if newIp == ip {
 			loopDetection++
 			if loopDetection > 10 {
-				return fmt.Errorf("Worker %d: loop detected", workerId)
+				return "", fmt.Errorf("Worker %d: loop detected", workerId)
 			}
 		} else {
 			loopDetection = 0
@@ -269,9 +281,11 @@ func SolveComputer(workerId int, comp *day17.Computer) error {
 	}
 
 	close(comp.Output)
+	workerWg.Wait()
 	if DEBUG {
 		fmt.Printf("Worker %d: Solve complete", workerId)
 		fmt.Printf("Worker %d: Final State: %s\n", workerId, comp)
+		fmt.Printf("Worker %d: Output: %s\n", workerId, workerOutput)
 	}
-	return nil
+	return workerOutput, nil
 }
