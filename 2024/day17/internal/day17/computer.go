@@ -96,3 +96,15 @@ func (c *Computer) SetRegisterC(value *big.Int) {
 func (c *Computer) String() string {
 	return fmt.Sprintf("Computer: A=%s B=%s C=%s", c.a.String(), c.b.String(), c.c.String())
 }
+
+// // Clone // //
+func (c *Computer) Clone() *Computer {
+	return &Computer{
+		opcodes:            append([]Opcode{}, c.opcodes...),
+		instructionPointer: c.instructionPointer,
+		a:                  big.NewInt(0).Set(c.a),
+		b:                  big.NewInt(0).Set(c.b),
+		c:                  big.NewInt(0).Set(c.c),
+		Output:             make(chan *big.Int),
+	}
+}

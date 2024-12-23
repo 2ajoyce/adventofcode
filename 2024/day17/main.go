@@ -140,26 +140,35 @@ func parseLines(lines []string) (*day17.Computer, error) {
 }
 
 func solve(comp *day17.Computer, WORKER_COUNT int) ([]string, error) {
-	DEBUG := os.Getenv("DEBUG") == "true"
+	//DEBUG := os.Getenv("DEBUG") == "true"
 	fmt.Printf("Beginning solve with %d workers\n", WORKER_COUNT)
-	if DEBUG {
-		fmt.Printf("Initial State: %s\n", comp)
-	}
-	var output = "Output: "
-	var loopDetection = 0
+	output := ""
+	for i := 0; i < WORKER_COUNT; i++ {
+		go SolveComputer(i, comp)
 
-	// Subscribe to the computer's output channel and listen for output
-	done := make(chan bool)
-	go func() {
 		for out := range comp.Output {
 			output = output + fmt.Sprintf("%s,", out)
 		}
-		done <- true
 		// Remove the trailing comma
 		if len(output) > 0 {
 			output = strings.TrimSuffix(output, ",")
 		}
-	}()
+		output = "Output: " + output
+	}
+
+	fmt.Println("Solve complete")
+	fmt.Printf("Final State: %s\n", comp)
+	fmt.Printf("Output: %s\n", output)
+	return []string{output}, nil
+}
+
+func SolveComputer(workerId int, comp *day17.Computer) error {
+	DEBUG := os.Getenv("DEBUG") == "true"
+	if DEBUG {
+		fmt.Printf("Worker %d: Beginning solve\n", workerId)
+		fmt.Printf("Worker %d: Initial State: %s\n", workerId, comp)
+	}
+	var loopDetection = 0
 
 	// Get the opcodes from the computer
 	opcodes := comp.GetOpcodes()
@@ -171,32 +180,32 @@ func solve(comp *day17.Computer, WORKER_COUNT int) ([]string, error) {
 		opcode := opcodes[ip]
 
 		if DEBUG {
-			fmt.Println("Executing")
-			fmt.Printf("    Computer State: %s\n", comp)
-			fmt.Printf("    Instruction pointer %d\n", ip)
-			fmt.Printf("    Opcode %d\n", opcode)
-			fmt.Printf("    Operand: %d\n", opcodes[ip+1])
+			fmt.Printf("Worker %d: Executing", workerId)
+			fmt.Printf("Worker %d:     Computer State: %s\n", workerId, comp)
+			fmt.Printf("Worker %d:     Instruction pointer %d\n", workerId, ip)
+			fmt.Printf("Worker %d:     Opcode %d\n", workerId, opcode)
+			fmt.Printf("Worker %d:     Operand: %d\n", workerId, opcodes[ip+1])
 		}
 
 		// Get the function associated with the opcode
 		fn, err := opcode.GetInstruction()
 		if err != nil {
-			return nil, fmt.Errorf("error getting instruction for opcode %d at instruction pointer %d: %v", opcode, ip, err)
+			return fmt.Errorf("error in Worker %d: getting instruction for opcode %d at instruction pointer %d: %v", workerId, opcode, ip, err)
 		}
 		// Execute the function
 		err = fn(comp, opcodes[ip+1])
 		if err != nil {
-			return nil, fmt.Errorf("error executing opcode %d: %v", opcode, err)
+			return fmt.Errorf("error in Worker %d: executing opcode %d: %v", workerId, opcode, err)
 		}
 		// Get the instruction pointer from the computer
 		newIp := comp.GetInstructionPointer()
 		if DEBUG {
-			fmt.Printf("    New Instruction Pointer: %d\n", newIp)
+			fmt.Printf("Worker %d:     New Instruction Pointer: %d\n", workerId, newIp)
 		}
 		if newIp == ip {
 			loopDetection++
 			if loopDetection > 10 {
-				return nil, fmt.Errorf("loop detected")
+				return fmt.Errorf("Worker %d: loop detected", workerId)
 			}
 		} else {
 			loopDetection = 0
@@ -205,9 +214,9 @@ func solve(comp *day17.Computer, WORKER_COUNT int) ([]string, error) {
 	}
 
 	close(comp.Output)
-	<-done
-	fmt.Println("Solve complete")
-	fmt.Printf("Final State: %s\n", comp)
-	fmt.Printf("Output: %s\n", output)
-	return []string{output}, nil
+	if DEBUG {
+		fmt.Printf("Worker %d: Solve complete", workerId)
+		fmt.Printf("Worker %d: Final State: %s\n", workerId, comp)
+	}
+	return nil
 }

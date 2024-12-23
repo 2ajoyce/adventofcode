@@ -108,3 +108,37 @@ func TestOutputChannel(t *testing.T) {
 		t.Fatalf("expected output to be %s, got %s", expected.String(), result.String())
 	}
 }
+func TestClone(t *testing.T) {
+	comp := NewComputer()
+	comp.SetOpcodes([]Opcode{0, 1, 2, 3})
+	comp.SetInstructionPointer(5)
+	comp.SetRegisterA(big.NewInt(10))
+	comp.SetRegisterB(big.NewInt(20))
+	comp.SetRegisterC(big.NewInt(30))
+
+	clone := comp.Clone()
+
+	if clone == comp {
+		t.Fatal("expected clone to be a different instance")
+	}
+	if clone.GetInstructionPointer() != comp.GetInstructionPointer() {
+		t.Fatalf("expected instruction pointer to be %d, got %d", comp.GetInstructionPointer(), clone.GetInstructionPointer())
+	}
+	if clone.GetRegisterA().Cmp(comp.GetRegisterA()) != 0 {
+		t.Fatalf("expected register A to be %s, got %s", comp.GetRegisterA().String(), clone.GetRegisterA().String())
+	}
+	if clone.GetRegisterB().Cmp(comp.GetRegisterB()) != 0 {
+		t.Fatalf("expected register B to be %s, got %s", comp.GetRegisterB().String(), clone.GetRegisterB().String())
+	}
+	if clone.GetRegisterC().Cmp(comp.GetRegisterC()) != 0 {
+		t.Fatalf("expected register C to be %s, got %s", comp.GetRegisterC().String(), clone.GetRegisterC().String())
+	}
+	if len(clone.GetOpcodes()) != len(comp.GetOpcodes()) {
+		t.Fatalf("expected %d opcodes, got %d", len(comp.GetOpcodes()), len(clone.GetOpcodes()))
+	}
+	for i, opcode := range clone.GetOpcodes() {
+		if opcode != comp.GetOpcodes()[i] {
+			t.Fatalf("expected opcode %d at index %d, got %d", comp.GetOpcodes()[i], i, opcode)
+		}
+	}
+}

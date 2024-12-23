@@ -97,3 +97,22 @@ func TestMain3(t *testing.T) {
 	expectedContent := fmt.Sprintf("Output: %s", output)
 	validateOutput(t, expectedContent)
 }
+
+func TestMainCanSolvePart2(t *testing.T) {
+	// This test is checking the known example from the description to prove that the program
+	// works as expected
+	inputData := []string{
+		"Register A: 117440\n",
+		"Register B: 0\n",
+		"Register C: 0\n",
+		"\n",
+		"Program: 0,3,5,4,3,0\n",
+	}
+	const output = "0,3,5,4,3,0"
+	os.WriteFile(INPUT_FILE, []byte(strings.Join(inputData, "")), 0644)
+
+	main()
+
+	expectedContent := fmt.Sprintf("Output: %s", output)
+	validateOutput(t, expectedContent)
+}
