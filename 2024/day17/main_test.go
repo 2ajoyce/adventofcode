@@ -1,9 +1,12 @@
 package main
 
 import (
+	"day17/internal/day17"
 	"fmt"
+	"math/big"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -47,72 +50,131 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func TestMain1(t *testing.T) {
-	inputData := []string{
-		"Register A: 729\n",
-		"Register B: 0\n",
-		"Register C: 0\n",
-		"\n",
-		"Program: 0,1,5,4,3,0\n",
+func TestSolveComputer1(t *testing.T) {
+	comp := day17.NewComputer()
+	comp.SetRegisterA(big.NewInt(729))
+	comp.SetOpcodes([]day17.Opcode{0, 1, 5, 4, 3, 0})
+	expectedOutput := "4,6,3,5,6,3,5,2,1,0"
+	output := ""
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for out := range comp.Output {
+			output = output + fmt.Sprintf("%s,", out)
+		}
+		if len(output) > 0 {
+			output = strings.TrimSuffix(output, ",")
+		}
+	}()
+
+	err := SolveComputer(0, comp)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
 	}
-	const output = "4,6,3,5,6,3,5,2,1,0"
-	os.WriteFile(INPUT_FILE, []byte(strings.Join(inputData, "")), 0644)
 
-	main()
+	wg.Wait()
 
-	expectedContent := fmt.Sprintf("Output: %s", output)
-	validateOutput(t, expectedContent)
+	if output != expectedOutput {
+		t.Errorf("Expected output to be '%s' but got: '%s'", expectedOutput, output)
+	}
 }
 
-func TestMain2(t *testing.T) {
-	inputData := []string{
-		"Register A: 10\n",
-		"Register B: 0\n",
-		"Register C: 0\n",
-		"\n",
-		"Program: 5,0,5,1,5,4\n",
+func TestSolveComputer2(t *testing.T) {
+	comp := day17.NewComputer()
+	comp.SetRegisterA(big.NewInt(10))
+	comp.SetOpcodes([]day17.Opcode{5, 0, 5, 1, 5, 4})
+	expectedOutput := "0,1,2"
+	output := ""
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for out := range comp.Output {
+			output = output + fmt.Sprintf("%s,", out)
+		}
+		// Remove the trailing comma
+		if len(output) > 0 {
+			output = strings.TrimSuffix(output, ",")
+		}
+	}()
+
+	err := SolveComputer(0, comp)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
 	}
-	const output = "0,1,2"
-	os.WriteFile(INPUT_FILE, []byte(strings.Join(inputData, "")), 0644)
 
-	main()
+	wg.Wait()
 
-	expectedContent := fmt.Sprintf("Output: %s", output)
-	validateOutput(t, expectedContent)
+	if output != expectedOutput {
+		t.Errorf("Expected output to be '%s', but got: %s", expectedOutput, output)
+	}
 }
 
-func TestMain3(t *testing.T) {
-	inputData := []string{
-		"Register A: 2024\n",
-		"Register B: 0\n",
-		"Register C: 0\n",
-		"\n",
-		"Program: 0,1,5,4,3,0\n",
+func TestSolveComputer3(t *testing.T) {
+	comp := day17.NewComputer()
+	comp.SetRegisterA(big.NewInt(2024))
+	comp.SetOpcodes([]day17.Opcode{0, 1, 5, 4, 3, 0})
+	expectedOutput := "4,2,5,6,7,7,7,7,3,1,0"
+	output := ""
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for out := range comp.Output {
+			output = output + fmt.Sprintf("%s,", out)
+		}
+		// Remove the trailing comma
+		if len(output) > 0 {
+			output = strings.TrimSuffix(output, ",")
+		}
+	}()
+
+	err := SolveComputer(0, comp)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
 	}
-	const output = "4,2,5,6,7,7,7,7,3,1,0"
-	os.WriteFile(INPUT_FILE, []byte(strings.Join(inputData, "")), 0644)
 
-	main()
+	wg.Wait()
 
-	expectedContent := fmt.Sprintf("Output: %s", output)
-	validateOutput(t, expectedContent)
+	if output != expectedOutput {
+		t.Errorf("Expected output to be '%s', but got: %s", expectedOutput, output)
+	}
 }
 
-func TestMainCanSolvePart2(t *testing.T) {
+func TestSolveCanSolvePart2(t *testing.T) {
 	// This test is checking the known example from the description to prove that the program
 	// works as expected
-	inputData := []string{
-		"Register A: 117440\n",
-		"Register B: 0\n",
-		"Register C: 0\n",
-		"\n",
-		"Program: 0,3,5,4,3,0\n",
+	comp := day17.NewComputer()
+	comp.SetRegisterA(big.NewInt(117440))
+	comp.SetOpcodes([]day17.Opcode{0, 3, 5, 4, 3, 0})
+	expectedOutput := "0,3,5,4,3,0"
+	output := ""
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for out := range comp.Output {
+			output = output + fmt.Sprintf("%s,", out)
+		}
+		// Remove the trailing comma
+		if len(output) > 0 {
+			output = strings.TrimSuffix(output, ",")
+		}
+	}()
+
+	err := SolveComputer(0, comp)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
 	}
-	const output = "0,3,5,4,3,0"
-	os.WriteFile(INPUT_FILE, []byte(strings.Join(inputData, "")), 0644)
 
-	main()
+	wg.Wait()
 
-	expectedContent := fmt.Sprintf("Output: %s", output)
-	validateOutput(t, expectedContent)
+	if output != expectedOutput {
+		t.Errorf("Expected output to be '%s', but got: %s", expectedOutput, output)
+	}
 }

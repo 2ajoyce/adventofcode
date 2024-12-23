@@ -140,25 +140,70 @@ func parseLines(lines []string) (*day17.Computer, error) {
 }
 
 func solve(comp *day17.Computer, WORKER_COUNT int) ([]string, error) {
-	//DEBUG := os.Getenv("DEBUG") == "true"
 	fmt.Printf("Beginning solve with %d workers\n", WORKER_COUNT)
-	output := ""
-	for i := 0; i < WORKER_COUNT; i++ {
-		go SolveComputer(i, comp)
 
-		for out := range comp.Output {
-			output = output + fmt.Sprintf("%s,", out)
+	// Calculate the expected output based on the initial state of the computer
+	expectedOutput := ""
+	opcodes := comp.GetOpcodes()
+	for i, opcode := range opcodes {
+		expectedOutput = expectedOutput + fmt.Sprintf("%d", opcode)
+
+		if i == len(opcodes)-1 { // Add a comma after every opcode except the last one
+			expectedOutput = strings.TrimSuffix(expectedOutput, ",")
 		}
-		// Remove the trailing comma
-		if len(output) > 0 {
-			output = strings.TrimSuffix(output, ",")
-		}
-		output = "Output: " + output
 	}
 
+	regAValue := big.NewInt(0)
+	var successfulValue *big.Int
+	successfulValue = nil
+	workerId := 0
+
+	// Create a buffered channel to limit the number of concurrent goroutines
+	sem := make(chan struct{}, WORKER_COUNT)
+	results := make(chan *big.Int)
+
+	for successfulValue == nil {
+		sem <- struct{}{} // Acquire a slot
+
+		cloneComp := comp.Clone()
+		cloneComp.SetRegisterA(regAValue)
+
+		go func(cloneComp *day17.Computer, regAValue *big.Int) {
+			defer func() { <-sem }() // Release the slot
+
+			output := ""
+			for out := range cloneComp.Output {
+				output = output + fmt.Sprintf("%s,", out)
+			}
+			// Remove the trailing comma
+			if len(output) > 0 {
+				output = strings.TrimSuffix(output, ",")
+			}
+			if output == expectedOutput {
+				results <- regAValue
+			} else {
+				results <- nil
+			}
+		}(cloneComp, new(big.Int).Set(regAValue))
+
+		go SolveComputer(workerId, cloneComp) // This swallows the error returned by SolveComputer
+
+		regAValue.Add(regAValue, big.NewInt(1))
+		workerId++
+
+		select {
+		case successfulValue = <-results:
+			if successfulValue != nil {
+				break
+			}
+		default:
+		}
+	}
+
+	output := "Lowest RegA Value: " + successfulValue.String()
 	fmt.Println("Solve complete")
 	fmt.Printf("Final State: %s\n", comp)
-	fmt.Printf("Output: %s\n", output)
+	fmt.Println(output)
 	return []string{output}, nil
 }
 
@@ -192,11 +237,21 @@ func SolveComputer(workerId int, comp *day17.Computer) error {
 		if err != nil {
 			return fmt.Errorf("error in Worker %d: getting instruction for opcode %d at instruction pointer %d: %v", workerId, opcode, ip, err)
 		}
+
+		if DEBUG {
+			fmt.Printf("Worker %d:     Executing Function\n", workerId)
+		}
+
 		// Execute the function
 		err = fn(comp, opcodes[ip+1])
 		if err != nil {
 			return fmt.Errorf("error in Worker %d: executing opcode %d: %v", workerId, opcode, err)
 		}
+
+		if DEBUG {
+			fmt.Printf("Worker %d:     Fetching New Instruction Pointer\n", workerId)
+		}
+
 		// Get the instruction pointer from the computer
 		newIp := comp.GetInstructionPointer()
 		if DEBUG {

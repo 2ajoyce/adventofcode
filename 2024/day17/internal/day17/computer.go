@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+
+	"github.com/google/uuid"
 )
 
 ////////////////////////////////////////
@@ -11,6 +13,7 @@ import (
 ////////////////////////////////////////
 
 type Computer struct {
+	id                 uuid.UUID
 	opcodes            []Opcode
 	instructionPointer int // index of current opcode
 	a                  *big.Int
@@ -20,7 +23,12 @@ type Computer struct {
 }
 
 func NewComputer() *Computer {
+	id, err := uuid.NewV7()
+	if err != nil {
+		panic(fmt.Sprintf("error generating UUID: %v", err))
+	}
 	return &Computer{
+		id:                 id,
 		opcodes:            make([]Opcode, 0),
 		instructionPointer: 0,
 		a:                  big.NewInt(0),
