@@ -54,7 +54,7 @@ func main() {
 		fmt.Println("Error parsing input:", err)
 		return
 	}
-	results, err := solve(input, PARALLELISM)
+	results, err := solvePredictive(input, PARALLELISM)
 	if err != nil {
 		fmt.Println("Error solving 1:", err)
 		return
@@ -64,7 +64,7 @@ func main() {
 	// WRITE OUTPUT FILE
 	////////////////////////////////////////////////////////////////////
 
-	err = aocUtils.WriteOutput(OUTPUT_FILE, results)
+	err = aocUtils.WriteToFile(OUTPUT_FILE, results)
 	if err != nil {
 		fmt.Printf("Error writing to %s: %v", OUTPUT_FILE, err)
 		return
@@ -192,6 +192,7 @@ func solve(comp *day17.Computer, WORKER_COUNT int) ([]string, error) {
 	go func() {
 		for optimalRegAValue == nil {
 			tasks <- new(big.Int).Set(testRegAValue)
+			// Instead of incrementing by 1, increment one octal at a time
 			testRegAValue.Add(testRegAValue, big.NewInt(1))
 			bar.Add(1)
 			tasksDistributed++
@@ -203,6 +204,39 @@ func solve(comp *day17.Computer, WORKER_COUNT int) ([]string, error) {
 	output := fmt.Sprintf("Lowest RegA Value: %s", optimalRegAValue)
 	fmt.Println(output)
 	return []string{output}, nil
+}
+
+func increaseByOneInOctal(value *big.Int, position int) *big.Int {
+	octalString := toOctal(value)
+	if position < 0 || position >= len(octalString) {
+		panic(fmt.Errorf("position %d out of bounds for octal string %s", position, octalString))
+	}
+	newOctalString := ""
+	for i, digit := range octalString {
+		actualPosition := len(octalString) - i - 1
+		if actualPosition == position {
+			newDigit := digit + 1
+			if newDigit > '7' {
+				newDigit = '0'
+			}
+			newOctalString = string(newDigit) + newOctalString
+		} else {
+			newOctalString = string(digit) + newOctalString
+		}
+	}
+	return fromOctal(newOctalString)
+}
+
+func toOctal(value *big.Int) string {
+	return value.Text(8)
+}
+
+func fromOctal(value string) *big.Int {
+	result, success := big.NewInt(0).SetString(value, 8)
+	if !success {
+		panic(fmt.Errorf("error converting octal string to big.Int: %s", value))
+	}
+	return result
 }
 
 func SolveComputer(workerId int, comp *day17.Computer) (string, error) {
@@ -288,4 +322,105 @@ func SolveComputer(workerId int, comp *day17.Computer) (string, error) {
 		fmt.Printf("Worker %d: Output: %s\n", workerId, workerOutput)
 	}
 	return workerOutput, nil
+}
+
+// Alternative version where I was generating sample data to feed the predictive
+// approach for Part 2
+func solvePredictive(comp *day17.Computer, WORKER_COUNT int) ([]string, error) {
+	fmt.Printf("Beginning solve with %d workers\n", WORKER_COUNT)
+
+	// Calculate the expected output based on the initial state of the computer
+	expectedOutput := ""
+	opcodes := comp.GetOpcodes()
+	for _, opcode := range opcodes {
+		expectedOutput = expectedOutput + fmt.Sprintf("%d,", opcode)
+	}
+	expectedOutput = strings.TrimSuffix(expectedOutput, ",")
+
+	testRegAValue := big.NewInt(216134799294990)
+	var optimalRegAValue *big.Int = nil
+	bar := progressbar.Default(testRegAValue.Int64(), "Solving")
+
+	// Create a channel to distribute tasks to workers
+	tasks := make(chan *big.Int, WORKER_COUNT)
+	type inputOutput struct {
+		input  string
+		output string
+	}
+	results := make(chan inputOutput, WORKER_COUNT)
+
+	// Read results from workers
+	go func() {
+		header := "input,output"
+		err := aocUtils.AppendToFile("data.csv", []string{header})
+		if err != nil {
+			panic(fmt.Errorf("unexpected error: %v", err))
+		}
+		comparisonString := strings.ReplaceAll(expectedOutput, ",", "")
+		aocUtils.AppendToFile("data.csv", []string{comparisonString})
+		for result := range results {
+			if len(result.output) < len(comparisonString) {
+				break
+			}
+			if !strings.HasSuffix(result.output, "155530") {
+				continue
+			}
+			data := fmt.Sprintf("%s,%s", result.input, result.output)
+			err := aocUtils.AppendToFile("data.csv", []string{data})
+			if err != nil {
+				panic(fmt.Errorf("unexpected error: %v", err))
+			}
+		}
+	}()
+
+	var wg sync.WaitGroup
+	// Launch worker goroutines
+	for i := 0; i < WORKER_COUNT; i++ {
+		wg.Add(1)
+		go func(workerId int) {
+			defer wg.Done()
+			for regA := range tasks {
+				cloneComp := comp.Clone()
+				cloneComp.SetRegisterA(regA)
+
+				workerOutput, err := SolveComputer(workerId, cloneComp)
+				if err != nil {
+					panic(fmt.Errorf("unexpected error: %v", err))
+				}
+
+				if optimalRegAValue != nil {
+					break
+				}
+				if workerOutput == expectedOutput {
+					fmt.Printf("\nWorker %d found optimal RegA value: %s\n", workerId, regA)
+					optimalRegAValue = big.NewInt(0).Set(regA)
+				}
+				// Send the result to the results channel
+				regAString := regA.String()
+				workerOutput = strings.ReplaceAll(workerOutput, ",", "")
+				results <- inputOutput{input: regAString, output: workerOutput}
+			}
+		}(i)
+	}
+
+	// Distribute tasks to workers
+	tasksDistributed := 0
+	go func() {
+		fmt.Printf("Ignoring testRegAValue(%s) for now", testRegAValue)
+		i := 1
+		for optimalRegAValue == nil {
+			increment := big.NewInt(0).Exp(big.NewInt(8), big.NewInt(int64(6)), nil)
+			testRegAValue = big.NewInt(0).Sub(testRegAValue, increment)
+			tasks <- testRegAValue
+			bar.Add(1)
+			tasksDistributed++
+			i = i * 10
+		}
+		close(tasks)
+	}()
+
+	wg.Wait()
+	output := fmt.Sprintf("Lowest RegA Value: %s", optimalRegAValue)
+	fmt.Println(output)
+	return []string{output}, nil
 }

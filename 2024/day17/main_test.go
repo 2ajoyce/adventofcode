@@ -65,6 +65,25 @@ func TestSolveComputer1(t *testing.T) {
 	}
 }
 
+func TestSolveComputerFinal(t *testing.T) {
+	os.Setenv("DEBUG", "false")
+	comp := day17.NewComputer()
+	comp.SetRegisterA(big.NewInt(60645977707275))
+	// 03555114305731420
+	// 2413750341155530
+	comp.SetOpcodes([]day17.Opcode{2, 4, 1, 3, 7, 5, 0, 3, 4, 1, 1, 5, 5, 5, 3, 0})
+	expectedOutput := "2,4,1,3,7,5,0,3,4,1,1,5,5,5,3,0"
+
+	output, err := SolveComputer(0, comp)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+
+	if output != expectedOutput {
+		t.Errorf("Expected output to be \n'%s' but got: \n'%s'", expectedOutput, output)
+	}
+}
+
 func TestSolveComputer2(t *testing.T) {
 	comp := day17.NewComputer()
 	comp.SetRegisterA(big.NewInt(10))
