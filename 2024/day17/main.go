@@ -54,7 +54,7 @@ func main() {
 		fmt.Println("Error parsing input:", err)
 		return
 	}
-	results, err := solvePredictive(input, PARALLELISM)
+	results, err := solve(input, PARALLELISM)
 	if err != nil {
 		fmt.Println("Error solving 1:", err)
 		return
@@ -153,190 +153,6 @@ func solve(comp *day17.Computer, WORKER_COUNT int) ([]string, error) {
 	}
 	expectedOutput = strings.TrimSuffix(expectedOutput, ",")
 
-	testRegAValue := big.NewInt(0)
-	var optimalRegAValue *big.Int = nil
-	bar := progressbar.Default(-1, "Solving")
-
-	// Create a channel to distribute tasks to workers
-	tasks := make(chan *big.Int, WORKER_COUNT)
-
-	var wg sync.WaitGroup
-
-	// Launch worker goroutines
-	for i := 0; i < WORKER_COUNT; i++ {
-		wg.Add(1)
-		go func(workerId int) {
-			defer wg.Done()
-			for regA := range tasks {
-				cloneComp := comp.Clone()
-				cloneComp.SetRegisterA(regA)
-
-				workerOutput, err := SolveComputer(workerId, cloneComp)
-				if err != nil {
-					panic(fmt.Errorf("unexpected error: %v", err))
-				}
-
-				if optimalRegAValue != nil {
-					break
-				}
-				if workerOutput == expectedOutput {
-					fmt.Printf("\nWorker %d found optimal RegA value: %s\n", workerId, regA)
-					optimalRegAValue = big.NewInt(0).Set(regA)
-				}
-			}
-		}(i)
-	}
-
-	// Distribute tasks to workers
-	tasksDistributed := 0
-	go func() {
-		for optimalRegAValue == nil {
-			tasks <- new(big.Int).Set(testRegAValue)
-			// Instead of incrementing by 1, increment one octal at a time
-			testRegAValue.Add(testRegAValue, big.NewInt(1))
-			bar.Add(1)
-			tasksDistributed++
-		}
-		close(tasks)
-	}()
-
-	wg.Wait()
-	output := fmt.Sprintf("Lowest RegA Value: %s", optimalRegAValue)
-	fmt.Println(output)
-	return []string{output}, nil
-}
-
-func increaseByOneInOctal(value *big.Int, position int) *big.Int {
-	octalString := toOctal(value)
-	if position < 0 || position >= len(octalString) {
-		panic(fmt.Errorf("position %d out of bounds for octal string %s", position, octalString))
-	}
-	newOctalString := ""
-	for i, digit := range octalString {
-		actualPosition := len(octalString) - i - 1
-		if actualPosition == position {
-			newDigit := digit + 1
-			if newDigit > '7' {
-				newDigit = '0'
-			}
-			newOctalString = string(newDigit) + newOctalString
-		} else {
-			newOctalString = string(digit) + newOctalString
-		}
-	}
-	return fromOctal(newOctalString)
-}
-
-func toOctal(value *big.Int) string {
-	return value.Text(8)
-}
-
-func fromOctal(value string) *big.Int {
-	result, success := big.NewInt(0).SetString(value, 8)
-	if !success {
-		panic(fmt.Errorf("error converting octal string to big.Int: %s", value))
-	}
-	return result
-}
-
-func SolveComputer(workerId int, comp *day17.Computer) (string, error) {
-	DEBUG := os.Getenv("DEBUG") == "true"
-	if DEBUG {
-		fmt.Printf("Worker %d: Beginning solve\n", workerId)
-		fmt.Printf("Worker %d: Initial State: %s\n", workerId, comp)
-	}
-	var loopDetection = 0
-
-	// Get the opcodes from the computer
-	opcodes := comp.GetOpcodes()
-	// Get the instruction pointer from the computer
-	ip := comp.GetInstructionPointer()
-
-	var workerOutput string
-	var workerWg sync.WaitGroup
-	workerWg.Add(1)
-	go func() {
-		defer workerWg.Done()
-		for out := range comp.Output {
-			workerOutput = workerOutput + fmt.Sprintf("%s,", out)
-		}
-		// Remove the trailing comma
-		if len(workerOutput) > 0 {
-			workerOutput = strings.TrimSuffix(workerOutput, ",")
-		}
-	}()
-
-	for ip < len(opcodes) {
-		// Get the opcode at the instruction pointer
-		opcode := opcodes[ip]
-
-		if DEBUG {
-			fmt.Printf("Worker %d: Executing", workerId)
-			fmt.Printf("Worker %d:     Computer State: %s\n", workerId, comp)
-			fmt.Printf("Worker %d:     Instruction pointer %d\n", workerId, ip)
-			fmt.Printf("Worker %d:     Opcode %d\n", workerId, opcode)
-			fmt.Printf("Worker %d:     Operand: %d\n", workerId, opcodes[ip+1])
-		}
-
-		// Get the function associated with the opcode
-		fn, err := opcode.GetInstruction()
-		if err != nil {
-			return "", fmt.Errorf("error in Worker %d: getting instruction for opcode %d at instruction pointer %d: %v", workerId, opcode, ip, err)
-		}
-
-		if DEBUG {
-			fmt.Printf("Worker %d:     Executing Function\n", workerId)
-		}
-
-		// Execute the function
-		err = fn(comp, opcodes[ip+1])
-		if err != nil {
-			return "", fmt.Errorf("error in Worker %d: executing opcode %d: %v", workerId, opcode, err)
-		}
-
-		if DEBUG {
-			fmt.Printf("Worker %d:     Fetching New Instruction Pointer\n", workerId)
-		}
-
-		// Get the instruction pointer from the computer
-		newIp := comp.GetInstructionPointer()
-		if DEBUG {
-			fmt.Printf("Worker %d:     New Instruction Pointer: %d\n", workerId, newIp)
-		}
-		if newIp == ip {
-			loopDetection++
-			if loopDetection > 10 {
-				return "", fmt.Errorf("Worker %d: loop detected", workerId)
-			}
-		} else {
-			loopDetection = 0
-		}
-		ip = newIp
-	}
-
-	close(comp.Output)
-	workerWg.Wait()
-	if DEBUG {
-		fmt.Printf("Worker %d: Solve complete", workerId)
-		fmt.Printf("Worker %d: Final State: %s\n", workerId, comp)
-		fmt.Printf("Worker %d: Output: %s\n", workerId, workerOutput)
-	}
-	return workerOutput, nil
-}
-
-// Alternative version where I was generating sample data to feed the predictive
-// approach for Part 2
-func solvePredictive(comp *day17.Computer, WORKER_COUNT int) ([]string, error) {
-	fmt.Printf("Beginning solve with %d workers\n", WORKER_COUNT)
-
-	// Calculate the expected output based on the initial state of the computer
-	expectedOutput := ""
-	opcodes := comp.GetOpcodes()
-	for _, opcode := range opcodes {
-		expectedOutput = expectedOutput + fmt.Sprintf("%d,", opcode)
-	}
-	expectedOutput = strings.TrimSuffix(expectedOutput, ",")
-
 	testRegAValue := big.NewInt(216134799294990)
 	var optimalRegAValue *big.Int = nil
 	bar := progressbar.Default(testRegAValue.Int64(), "Solving")
@@ -423,4 +239,89 @@ func solvePredictive(comp *day17.Computer, WORKER_COUNT int) ([]string, error) {
 	output := fmt.Sprintf("Lowest RegA Value: %s", optimalRegAValue)
 	fmt.Println(output)
 	return []string{output}, nil
+}
+
+func SolveComputer(workerId int, comp *day17.Computer) (string, error) {
+	DEBUG := os.Getenv("DEBUG") == "true"
+	if DEBUG {
+		fmt.Printf("Worker %d: Beginning solve\n", workerId)
+		fmt.Printf("Worker %d: Initial State: %s\n", workerId, comp)
+	}
+	var loopDetection = 0
+
+	// Get the opcodes from the computer
+	opcodes := comp.GetOpcodes()
+	// Get the instruction pointer from the computer
+	ip := comp.GetInstructionPointer()
+
+	var workerOutput string
+	var workerWg sync.WaitGroup
+	workerWg.Add(1)
+	go func() {
+		defer workerWg.Done()
+		for out := range comp.Output {
+			workerOutput = workerOutput + fmt.Sprintf("%s,", out)
+		}
+		// Remove the trailing comma
+		if len(workerOutput) > 0 {
+			workerOutput = strings.TrimSuffix(workerOutput, ",")
+		}
+	}()
+
+	for ip < len(opcodes) {
+		// Get the opcode at the instruction pointer
+		opcode := opcodes[ip]
+
+		if DEBUG {
+			fmt.Printf("Worker %d: Executing", workerId)
+			fmt.Printf("Worker %d:     Computer State: %s\n", workerId, comp)
+			fmt.Printf("Worker %d:     Instruction pointer %d\n", workerId, ip)
+			fmt.Printf("Worker %d:     Opcode %d\n", workerId, opcode)
+			fmt.Printf("Worker %d:     Operand: %d\n", workerId, opcodes[ip+1])
+		}
+
+		// Get the function associated with the opcode
+		fn, err := opcode.GetInstruction()
+		if err != nil {
+			return "", fmt.Errorf("error in Worker %d: getting instruction for opcode %d at instruction pointer %d: %v", workerId, opcode, ip, err)
+		}
+
+		if DEBUG {
+			fmt.Printf("Worker %d:     Executing Function\n", workerId)
+		}
+
+		// Execute the function
+		err = fn(comp, opcodes[ip+1])
+		if err != nil {
+			return "", fmt.Errorf("error in Worker %d: executing opcode %d: %v", workerId, opcode, err)
+		}
+
+		if DEBUG {
+			fmt.Printf("Worker %d:     Fetching New Instruction Pointer\n", workerId)
+		}
+
+		// Get the instruction pointer from the computer
+		newIp := comp.GetInstructionPointer()
+		if DEBUG {
+			fmt.Printf("Worker %d:     New Instruction Pointer: %d\n", workerId, newIp)
+		}
+		if newIp == ip {
+			loopDetection++
+			if loopDetection > 10 {
+				return "", fmt.Errorf("Worker %d: loop detected", workerId)
+			}
+		} else {
+			loopDetection = 0
+		}
+		ip = newIp
+	}
+
+	close(comp.Output)
+	workerWg.Wait()
+	if DEBUG {
+		fmt.Printf("Worker %d: Solve complete", workerId)
+		fmt.Printf("Worker %d: Final State: %s\n", workerId, comp)
+		fmt.Printf("Worker %d: Output: %s\n", workerId, workerOutput)
+	}
+	return workerOutput, nil
 }
