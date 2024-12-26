@@ -27,7 +27,7 @@ func validateOutput(t *testing.T, expectedOutput string) bool {
 	}
 
 	if output[0] != expectedOutput {
-		t.Errorf("Expected output to contain '%s', but got: %v", expectedOutput, output)
+		t.Errorf("Expected output to contain '%s', but got: %s", expectedOutput, output[0])
 		return false
 	}
 	// If the validation fails, the input and output are retained for troubleshooting
@@ -66,7 +66,7 @@ func TestMainParseEmptyGrid(t *testing.T) {
 		"3:3",
 	}
 	aocUtils.WriteToFile(INPUT_FILE, input)
-	expectedOutput := "4"
+	expectedOutput := "No obstacle fully blocks the path"
 
 	main()
 
@@ -80,18 +80,18 @@ func TestMainParseFullGrid(t *testing.T) {
 	// 2###
 	input := []string{
 		"3:3",
-		"0,0",
-		"0,1",
-		"0,2",
-		"1,0",
-		"1,1",
+		"2,2",
+		"2,1",
 		"1,2",
 		"2,0",
-		"2,1",
-		"2,2",
+		"0,2",
+		"1,1",
+		"1,0",
+		"0,1",
+		"0,0",
 	}
 	aocUtils.WriteToFile(INPUT_FILE, input)
-	expectedOutput := "-1" // No path
+	expectedOutput := "(2, 2)" // No path
 
 	main()
 
@@ -108,7 +108,7 @@ func TestMainParseBaseCaseCenteredGrid(t *testing.T) {
 		"1,1",
 	}
 	aocUtils.WriteToFile(INPUT_FILE, input)
-	expectedOutput := "4"
+	expectedOutput := "No obstacle fully blocks the path"
 
 	main()
 
@@ -125,7 +125,7 @@ func TestMainParseBaseCaseRightGrid(t *testing.T) {
 		"2,1",
 	}
 	aocUtils.WriteToFile(INPUT_FILE, input)
-	expectedOutput := "4"
+	expectedOutput := "No obstacle fully blocks the path"
 
 	main()
 
@@ -142,7 +142,7 @@ func TestMainParseBaseCaseLeftGrid(t *testing.T) {
 		"0,1",
 	}
 	aocUtils.WriteToFile(INPUT_FILE, input)
-	expectedOutput := "4"
+	expectedOutput := "No obstacle fully blocks the path"
 
 	main()
 
@@ -160,7 +160,7 @@ func TestMainParseBaseCaseOneWayGrid(t *testing.T) {
 		"2,1",
 	}
 	aocUtils.WriteToFile(INPUT_FILE, input)
-	expectedOutput := "4"
+	expectedOutput := "No obstacle fully blocks the path"
 
 	main()
 
@@ -184,7 +184,44 @@ func TestMainPart1Example(t *testing.T) {
 		"5,1",
 	}
 	aocUtils.WriteToFile(INPUT_FILE, input)
-	expectedOutput := "22"
+	expectedOutput := "No obstacle fully blocks the path"
+
+	main()
+
+	validateOutput(t, expectedOutput)
+}
+
+func TestMainPart2Example(t *testing.T) {
+	input := []string{
+		"7:7",
+		"5,4",
+		"4,2",
+		"4,5",
+		"3,0",
+		"2,1",
+		"6,3",
+		"2,4",
+		"1,5",
+		"0,6",
+		"3,3",
+		"2,6",
+		"5,1",
+		"1,2",
+		"5,5",
+		"2,5",
+		"6,5",
+		"1,4",
+		"0,4",
+		"6,4",
+		"1,1",
+		"6,1",
+		"1,0",
+		"0,5",
+		"1,6",
+		"2,0",
+	}
+	aocUtils.WriteToFile(INPUT_FILE, input)
+	expectedOutput := "(6, 1)"
 
 	main()
 

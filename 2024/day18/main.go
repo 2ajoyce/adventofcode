@@ -7,6 +7,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/schollz/progressbar/v3"
 )
 
 func main() {
@@ -45,12 +47,12 @@ func main() {
 	// SOLUTION LOGIC
 	////////////////////////////////////////////////////////////////////
 
-	input, err := parseLines(lines)
+	sim, obstacles, err := parseLines(lines)
 	if err != nil {
 		fmt.Println("Error parsing input:", err)
 		return
 	}
-	results, err := solve(input)
+	results, err := solve(sim, obstacles)
 	if err != nil {
 		fmt.Println("Error solving 1:", err)
 		return
@@ -71,12 +73,12 @@ func main() {
 
 const ObstacleEntityType = "#"
 
-func parseLines(lines []string) (simulation.Simulation, error) {
+func parseLines(lines []string) (simulation.Simulation, []simulation.Coord, error) {
 	DEBUG := os.Getenv("DEBUG") == "true"
 	fmt.Println("Parsing Input...")
 
 	if len(lines) == 0 {
-		return nil, fmt.Errorf("input is empty")
+		return nil, nil, fmt.Errorf("input is empty")
 	}
 
 	// The first line is the simulation width and height
@@ -84,15 +86,15 @@ func parseLines(lines []string) (simulation.Simulation, error) {
 	dimension := lines[0]
 	dimensions := strings.Split(dimension, ":")
 	if len(dimensions) != 2 {
-		return nil, fmt.Errorf("invalid dimension format: %s", dimension)
+		return nil, nil, fmt.Errorf("invalid dimension format: %s", dimension)
 	}
 	width, err := strconv.Atoi(dimensions[0])
 	if err != nil {
-		return nil, fmt.Errorf("invalid width: %s", dimensions[0])
+		return nil, nil, fmt.Errorf("invalid width: %s", dimensions[0])
 	}
 	height, err := strconv.Atoi(dimensions[1])
 	if err != nil {
-		return nil, fmt.Errorf("invalid height: %s", dimensions[1])
+		return nil, nil, fmt.Errorf("invalid height: %s", dimensions[1])
 	}
 
 	// Initialize the simulation
@@ -101,39 +103,35 @@ func parseLines(lines []string) (simulation.Simulation, error) {
 	// Remove the dimensions from the lines now that it is parsed
 	lines = lines[1:]
 
+	obstacles := []simulation.Coord{}
 	// Parse the rest of the lines
 	for i, line := range lines {
 		coords := strings.Split(line, ",")
 		if len(coords) != 2 {
-			return nil, fmt.Errorf("invalid coordinate format on line %d: %s", i, line)
+			return nil, nil, fmt.Errorf("invalid coordinate format on line %d: %s", i, line)
 		}
 		x, err := strconv.Atoi(coords[0])
 		if err != nil {
-			return nil, fmt.Errorf("invalid x coordinate: %s", coords[0])
+			return nil, nil, fmt.Errorf("invalid x coordinate: %s", coords[0])
 		}
 		y, err := strconv.Atoi(coords[1])
 		if err != nil {
-			return nil, fmt.Errorf("invalid y coordinate: %s", coords[1])
+			return nil, nil, fmt.Errorf("invalid y coordinate: %s", coords[1])
 		}
 		coord := simulation.Coord{X: x, Y: y}
-		obst, err := simulation.NewEntity(ObstacleEntityType)
-		if err != nil {
-			return nil, fmt.Errorf("error creating entity %s at %v: %v", ObstacleEntityType, coord, err)
-		}
-		sim.AddEntity(obst, []simulation.Coord{coord}, simulation.North)
+		obstacles = append(obstacles, coord)
 	}
 
 	// Verify the simulation was created correctly
-	entities := sim.GetEntities()
-	if len(entities) > 100 && len(entities) != 3450 { // This is hacky, but it should avoid running validation on the tests
-		return nil, fmt.Errorf("expected 3450 entities, got %d", len(entities))
+	if len(obstacles) > 100 && len(obstacles) != 3450 { // This is hacky, but it should avoid running validation on the tests
+		return nil, nil, fmt.Errorf("expected 3450 obstacles, got %d", len(obstacles))
 	}
 
 	if DEBUG {
 		fmt.Printf("Parsing complete\n\n")
 	}
 
-	return sim, nil
+	return sim, obstacles, nil
 }
 
 type printMask map[simulation.Coord]string
@@ -173,7 +171,7 @@ func stringifySimulation(sim simulation.Simulation, masks []printMask) string {
 	return output
 }
 
-func solve(sim simulation.Simulation) ([]string, error) {
+func solve(sim simulation.Simulation, obstacles []simulation.Coord) ([]string, error) {
 	DEBUG := os.Getenv("DEBUG") == "true"
 	fmt.Println("Beginning single-threaded solve")
 
@@ -182,30 +180,56 @@ func solve(sim simulation.Simulation) ([]string, error) {
 		fmt.Printf("Initial State:\n%s\n", stringifySimulation(sim, nil))
 	}
 
-	// Make the graph
-	fmt.Printf("Making graph...\n")
-	g, err := makeGraph(sim)
-	if err != nil {
-		return nil, fmt.Errorf("error making graph: %v", err)
-	}
+	//////////////////////////////////////////////////////////////////////////////////////
+	// This giant loop isn't optimal, but it worked for the scope of the problem
+	//////////////////////////////////////////////////////////////////////////////////////
+	var alwaysValid bool = true
+	var finalObstacle simulation.Coord // The obstacle that when added, prevents any path from being found
+	bar := progressbar.Default(int64(len(obstacles)))
+	for i, obstacle := range obstacles {
+		// Clone the simulation
+		cloneSim := sim.Clone()
 
-	// Solve the graph using Dijkstra's algorithm
-	start := simulation.Coord{X: 0, Y: 0}
-	target := simulation.Coord{X: sim.GetMap().GetWidth() - 1, Y: sim.GetMap().GetHeight() - 1}
-	fmt.Printf("Solving graph from %v to %v...\n", start, target)
-	path, cost := simulation.Dijkstra(g, start, target, simulation.CostManhattan)
-	fmt.Printf("Path found with cost %.1f:\n", cost)
-
-	if DEBUG {
-		// Print the path
-		mask := make(printMask)
-		for _, step := range path {
-			mask[step.Node] = "O"
+		// Add all obstacles [0, i] to the simulation
+		for j := 0; j <= i; j++ {
+			entity, err := simulation.NewEntity(ObstacleEntityType)
+			if err != nil {
+				return nil, fmt.Errorf("error creating obstacle entity: %v", err)
+			}
+			_, err = cloneSim.AddEntity(entity, []simulation.Coord{obstacles[j]}, simulation.North)
+			if err != nil {
+				return nil, fmt.Errorf("error adding obstacle %d: %v", j, err)
+			}
 		}
-		fmt.Printf("Path:\n%s\n", stringifySimulation(sim, []printMask{mask}))
+
+		// Make the graph
+		g, err := makeGraph(cloneSim)
+		if err != nil {
+			return nil, fmt.Errorf("error making graph: %v", err)
+		}
+
+		// Solve the graph using Dijkstra's algorithm
+		start := simulation.Coord{X: 0, Y: 0}
+		target := simulation.Coord{X: cloneSim.GetMap().GetWidth() - 1, Y: cloneSim.GetMap().GetHeight() - 1}
+		_, cost := simulation.Dijkstra(g, start, target, simulation.CostManhattan)
+		if cost < 0 {
+			alwaysValid = false
+			finalObstacle = obstacle
+
+			if DEBUG {
+				fmt.Printf("Path:\n%s\n", stringifySimulation(cloneSim, nil))
+			}
+
+			break
+		}
+		bar.Add(1)
 	}
 
-	result := []string{fmt.Sprintf("%.0f", cost)}
+	if alwaysValid { // This should only happen in test cases
+		return []string{"No obstacle fully blocks the path"}, nil
+	}
+
+	result := []string{fmt.Sprintf("%s", finalObstacle.String())}
 	return result, nil
 }
 
