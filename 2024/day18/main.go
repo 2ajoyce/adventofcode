@@ -101,13 +101,6 @@ func parseLines(lines []string) (simulation.Simulation, error) {
 	// Remove the dimensions from the lines now that it is parsed
 	lines = lines[1:]
 
-	if DEBUG {
-		for i, line := range lines {
-			fmt.Printf("Line %4d :   %s\n", i, line)
-		}
-		fmt.Printf("\n")
-	}
-
 	// Parse the rest of the lines
 	for i, line := range lines {
 		if i == 1024 {
@@ -117,9 +110,6 @@ func parseLines(lines []string) (simulation.Simulation, error) {
 				return nil, fmt.Errorf("line 1024 is %s, expected %s", line, expectedValue)
 			}
 			break
-		}
-		if DEBUG {
-			fmt.Printf("Parsing line %d: %s\n", i, line)
 		}
 		coords := strings.Split(line, ",")
 		if len(coords) != 2 {
@@ -139,15 +129,12 @@ func parseLines(lines []string) (simulation.Simulation, error) {
 			return nil, fmt.Errorf("error creating entity %s at %v: %v", ObstacleEntityType, coord, err)
 		}
 		sim.AddEntity(obst, []simulation.Coord{coord}, simulation.North)
-		if DEBUG {
-			fmt.Printf("    Added entity %s at %v\n", ObstacleEntityType, coord)
-		}
 	}
 
 	// Verify the simulation was created correctly
 	entities := sim.GetEntities()
 	if len(entities) > 100 && len(entities) != 1024 { // This is hacky, but it should avoid running validation on the tests
-		return nil, fmt.Errorf("expected 1024 entities, got %d", len(entities))
+		return nil, fmt.Errorf("expected 3450 entities, got %d", len(entities))
 	}
 
 	if DEBUG {
@@ -198,8 +185,10 @@ func solve(sim simulation.Simulation) ([]string, error) {
 	DEBUG := os.Getenv("DEBUG") == "true"
 	fmt.Println("Beginning single-threaded solve")
 
-	// Print the initial state
-	fmt.Printf("Initial State:\n%s\n", stringifySimulation(sim, nil))
+	if DEBUG {
+		// Print the initial state
+		fmt.Printf("Initial State:\n%s\n", stringifySimulation(sim, nil))
+	}
 
 	// Make the graph
 	fmt.Printf("Making graph...\n")
@@ -214,9 +203,16 @@ func solve(sim simulation.Simulation) ([]string, error) {
 	fmt.Printf("Solving graph from %v to %v...\n", start, target)
 	path, cost := simulation.Dijkstra(g, start, target, simulation.CostManhattan)
 	fmt.Printf("Path found with cost %.1f:\n", cost)
+
 	if DEBUG {
-		fmt.Printf("Path: %v\n", path)
+		// Print the path
+		mask := make(printMask)
+		for _, step := range path {
+			mask[step.Node] = "O"
+		}
+		fmt.Printf("Path:\n%s\n", stringifySimulation(sim, []printMask{mask}))
 	}
+
 	result := []string{fmt.Sprintf("%.0f", cost)}
 	return result, nil
 }
