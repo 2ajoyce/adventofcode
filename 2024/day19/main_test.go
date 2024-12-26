@@ -117,6 +117,12 @@ func TestDecomposeSentence(t *testing.T) {
 			sentence: Sentence("rbw"),
 			expected: nil,
 		},
+		{
+			name:     "Large Term is a trap",
+			terms:    []Term{"rr", "w", "wr"},
+			sentence: Sentence("wrr"),
+			expected: []Term{"w", "rr"},
+		},
 	}
 
 	for _, tt := range tests {
