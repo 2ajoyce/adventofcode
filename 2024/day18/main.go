@@ -103,14 +103,6 @@ func parseLines(lines []string) (simulation.Simulation, error) {
 
 	// Parse the rest of the lines
 	for i, line := range lines {
-		if i == 1024 {
-			// Part 1 only reads in the first 1024 lines (2025 if you include the dimensions)
-			expectedValue := "52,51"
-			if line != expectedValue {
-				return nil, fmt.Errorf("line 1024 is %s, expected %s", line, expectedValue)
-			}
-			break
-		}
 		coords := strings.Split(line, ",")
 		if len(coords) != 2 {
 			return nil, fmt.Errorf("invalid coordinate format on line %d: %s", i, line)
@@ -133,7 +125,7 @@ func parseLines(lines []string) (simulation.Simulation, error) {
 
 	// Verify the simulation was created correctly
 	entities := sim.GetEntities()
-	if len(entities) > 100 && len(entities) != 1024 { // This is hacky, but it should avoid running validation on the tests
+	if len(entities) > 100 && len(entities) != 3450 { // This is hacky, but it should avoid running validation on the tests
 		return nil, fmt.Errorf("expected 3450 entities, got %d", len(entities))
 	}
 
