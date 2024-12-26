@@ -177,7 +177,7 @@ func TestFindRangesIndexTwo(t *testing.T) {
 	ranges := findRanges(comp, searchSpace)
 
 	expectedRanges := []Range{
-		{Start: big.NewInt(98296), End: big.NewInt(163832), Index: searchSpace.Index - 1, Match: searchSpace.Match, OutputLength: len(opCodes)},
+		{Start: big.NewInt(98296), End: big.NewInt(135160), Index: searchSpace.Index - 1, Match: searchSpace.Match, OutputLength: len(opCodes)},
 	}
 
 	if len(ranges) != len(expectedRanges) {
@@ -201,11 +201,11 @@ func TestFindRangesIndexThree(t *testing.T) {
 	for _, opcode := range opCodes[index-1:] {
 		match += fmt.Sprintf("%d", opcode)
 	}
-	searchSpace := Range{Start: big.NewInt(98296), End: big.NewInt(163832), Index: index, Match: match, OutputLength: len(opCodes)}
+	searchSpace := Range{Start: big.NewInt(98296), End: big.NewInt(135160), Index: index, Match: match, OutputLength: len(opCodes)}
 	ranges := findRanges(comp, searchSpace)
 
 	expectedRanges := []Range{
-		{Start: big.NewInt(114680), End: big.NewInt(122872), Index: searchSpace.Index - 1, Match: searchSpace.Match, OutputLength: len(opCodes)},
+		{Start: big.NewInt(114680), End: big.NewInt(119288), Index: searchSpace.Index - 1, Match: searchSpace.Match, OutputLength: len(opCodes)},
 	}
 
 	if len(ranges) != len(expectedRanges) {
@@ -229,11 +229,11 @@ func TestFindRangesIndexFour(t *testing.T) {
 	for _, opcode := range opCodes[index-1:] {
 		match += fmt.Sprintf("%d", opcode)
 	}
-	searchSpace := Range{Start: big.NewInt(114680), End: big.NewInt(122872), Index: index, Match: match, OutputLength: len(opCodes)}
+	searchSpace := Range{Start: big.NewInt(114680), End: big.NewInt(119288), Index: index, Match: match, OutputLength: len(opCodes)}
 	ranges := findRanges(comp, searchSpace)
 
 	expectedRanges := []Range{
-		{Start: big.NewInt(117240), End: big.NewInt(118264), Index: searchSpace.Index - 1, Match: searchSpace.Match, OutputLength: len(opCodes)},
+		{Start: big.NewInt(117240), End: big.NewInt(117816), Index: searchSpace.Index - 1, Match: searchSpace.Match, OutputLength: len(opCodes)},
 	}
 
 	if len(ranges) != len(expectedRanges) {
@@ -257,11 +257,11 @@ func TestFindRangesIndexFive(t *testing.T) {
 	for _, opcode := range opCodes[index-1:] {
 		match += fmt.Sprintf("%d", opcode)
 	}
-	searchSpace := Range{Start: big.NewInt(117240), End: big.NewInt(118264), Index: index, Match: match, OutputLength: len(opCodes)}
+	searchSpace := Range{Start: big.NewInt(117240), End: big.NewInt(117816), Index: index, Match: match, OutputLength: len(opCodes)}
 	ranges := findRanges(comp, searchSpace)
 
 	expectedRanges := []Range{
-		{Start: big.NewInt(117432), End: big.NewInt(117560), Index: searchSpace.Index - 1, Match: searchSpace.Match, OutputLength: len(opCodes)},
+		{Start: big.NewInt(117432), End: big.NewInt(117504), Index: searchSpace.Index - 1, Match: searchSpace.Match, OutputLength: len(opCodes)},
 	}
 
 	if len(ranges) != len(expectedRanges) {
@@ -285,10 +285,17 @@ func TestFindRangesIndexSix(t *testing.T) {
 	for _, opcode := range opCodes[index-1:] {
 		match += fmt.Sprintf("%d", opcode)
 	}
-	searchSpace := Range{Start: big.NewInt(117432), End: big.NewInt(117560), Index: index, Match: match, OutputLength: len(opCodes)}
+	searchSpace := Range{Start: big.NewInt(117432), End: big.NewInt(117504), Index: index, Match: match, OutputLength: len(opCodes)}
 	ranges := findRanges(comp, searchSpace)
 
 	expectedRanges := []Range{
+		{Start: big.NewInt(117447), End: big.NewInt(117447), Index: searchSpace.Index - 1, Match: searchSpace.Match, OutputLength: len(opCodes)},
+		{Start: big.NewInt(117446), End: big.NewInt(117446), Index: searchSpace.Index - 1, Match: searchSpace.Match, OutputLength: len(opCodes)},
+		{Start: big.NewInt(117445), End: big.NewInt(117445), Index: searchSpace.Index - 1, Match: searchSpace.Match, OutputLength: len(opCodes)},
+		{Start: big.NewInt(117444), End: big.NewInt(117444), Index: searchSpace.Index - 1, Match: searchSpace.Match, OutputLength: len(opCodes)},
+		{Start: big.NewInt(117443), End: big.NewInt(117443), Index: searchSpace.Index - 1, Match: searchSpace.Match, OutputLength: len(opCodes)},
+		{Start: big.NewInt(117442), End: big.NewInt(117442), Index: searchSpace.Index - 1, Match: searchSpace.Match, OutputLength: len(opCodes)},
+		{Start: big.NewInt(117441), End: big.NewInt(117441), Index: searchSpace.Index - 1, Match: searchSpace.Match, OutputLength: len(opCodes)},
 		{Start: big.NewInt(117440), End: big.NewInt(117440), Index: searchSpace.Index - 1, Match: searchSpace.Match, OutputLength: len(opCodes)},
 	}
 
@@ -310,11 +317,20 @@ func TestFindRangesWithBFSTest(t *testing.T) {
 	// Define expected results at each depth level
 	expectedResults := [][]Range{
 		{{Start: big.NewInt(0), End: big.NewInt(262136), Index: index - 1, Match: "0", OutputLength: len(opCodes)}},
-		{{Start: big.NewInt(98296), End: big.NewInt(163832), Index: index - 2, Match: "30", OutputLength: len(opCodes)}},
-		{{Start: big.NewInt(114680), End: big.NewInt(122872), Index: index - 3, Match: "430", OutputLength: len(opCodes)}},
-		{{Start: big.NewInt(117240), End: big.NewInt(118264), Index: index - 4, Match: "5430", OutputLength: len(opCodes)}},
-		{{Start: big.NewInt(117432), End: big.NewInt(117560), Index: index - 5, Match: "35430", OutputLength: len(opCodes)}},
-		{{Start: big.NewInt(117440), End: big.NewInt(117440), Index: index - 6, Match: "035430", OutputLength: len(opCodes)}},
+		{{Start: big.NewInt(98296), End: big.NewInt(135160), Index: index - 2, Match: "30", OutputLength: len(opCodes)}},
+		{{Start: big.NewInt(114680), End: big.NewInt(119288), Index: index - 3, Match: "430", OutputLength: len(opCodes)}},
+		{{Start: big.NewInt(117240), End: big.NewInt(117816), Index: index - 4, Match: "5430", OutputLength: len(opCodes)}},
+		{{Start: big.NewInt(117432), End: big.NewInt(117504), Index: index - 5, Match: "35430", OutputLength: len(opCodes)}},
+		{
+			{Start: big.NewInt(117447), End: big.NewInt(117447), Index: index - 6, Match: "035430", OutputLength: len(opCodes)},
+			{Start: big.NewInt(117446), End: big.NewInt(117446), Index: index - 6, Match: "035430", OutputLength: len(opCodes)},
+			{Start: big.NewInt(117445), End: big.NewInt(117445), Index: index - 6, Match: "035430", OutputLength: len(opCodes)},
+			{Start: big.NewInt(117444), End: big.NewInt(117444), Index: index - 6, Match: "035430", OutputLength: len(opCodes)},
+			{Start: big.NewInt(117443), End: big.NewInt(117443), Index: index - 6, Match: "035430", OutputLength: len(opCodes)},
+			{Start: big.NewInt(117442), End: big.NewInt(117442), Index: index - 6, Match: "035430", OutputLength: len(opCodes)},
+			{Start: big.NewInt(117441), End: big.NewInt(117441), Index: index - 6, Match: "035430", OutputLength: len(opCodes)},
+			{Start: big.NewInt(117440), End: big.NewInt(117440), Index: index - 6, Match: "035430", OutputLength: len(opCodes)},
+		},
 	}
 
 	// Initialize the heap
@@ -361,7 +377,16 @@ func TestFindRangesBFS(t *testing.T) {
 	opCodes := []day17.Opcode{0, 3, 5, 4, 3, 0}
 
 	results := findRangesBFS(opCodes)
-	expectedResults := []*big.Int{big.NewInt(117440)}
+	expectedResults := []*big.Int{
+		big.NewInt(117447),
+		big.NewInt(117446),
+		big.NewInt(117445),
+		big.NewInt(117444),
+		big.NewInt(117443),
+		big.NewInt(117442),
+		big.NewInt(117441),
+		big.NewInt(117440),
+	}
 
 	if len(results) != len(expectedResults) {
 		t.Errorf("Expected %d results, but got %d", len(expectedResults), len(results))

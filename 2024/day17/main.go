@@ -170,7 +170,7 @@ type Increment struct {
 func findRanges(c *day17.Computer, r Range) []Range {
 	DEBUG := os.Getenv("DEBUG") == "true"
 	eight := big.NewInt(8)
-	increment := big.NewInt(0).Exp(eight, big.NewInt(int64(r.Index)), nil)
+	increment := big.NewInt(0).Exp(eight, big.NewInt(int64(r.Index-1)), nil)
 	if DEBUG {
 		fmt.Printf("Start: %s, End: %s, Increment: %s(8^%d), Match: %s\n", r.Start.String(), r.End.String(), increment.String(), r.Index, r.Match)
 	}
