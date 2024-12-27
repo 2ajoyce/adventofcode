@@ -202,33 +202,48 @@ func solve(path []simulation.Coord) ([]string, error) {
 				fmt.Printf("Comparing %v to %v\n", coord, path[i])
 			}
 
-			if !canReach(coord, path[i]) {
+			stepsToReach := canReach(coord, path[i])
+			if stepsToReach <= 0 {
 				continue
 			}
-			// The coord is within 2 steps of the current coord
 			if DEBUG {
 				fmt.Println("    Found a reachable location")
 			}
 
 			stepsToCurrent := steps
 			stepsToNew := i
-			stepsSaved := stepsToNew - stepsToCurrent - 2
+			stepsSaved := stepsToNew - stepsToCurrent - stepsToReach
 			if DEBUG {
 				fmt.Printf("    Steps to Current: %d, Steps to New: %d, Steps Saved: %d\n", stepsToCurrent, stepsToNew, stepsSaved)
 			}
 
-			if stepsSaved > 0 { // It takes 2 steps to move to the new location, less than 2 steps saved is not worth it
-				cheatsByStepsSaved[stepsSaved] = append(cheatsByStepsSaved[stepsSaved], Cheat{start: coord, end: path[i]})
+			if stepsSaved < 50 { // The example only shows cheats that save 50 or more steps
+				continue
 			}
+			cheatsByStepsSaved[stepsSaved] = append(cheatsByStepsSaved[stepsSaved], Cheat{start: coord, end: path[i]})
 		}
 	}
 	if DEBUG {
 		fmt.Println()
 	}
 
+	// Deduplicate the cheats. A cheat is a duplicate if the start and end are the same
+	uniqueCheats := make(map[Cheat]bool)
+	dedupedCheatsByStepsSaved := make(map[int][]Cheat)
+	for stepsSaved, cheats := range cheatsByStepsSaved {
+		for _, c := range cheats {
+			// If this cheat is already in the uniqueCheats, then skip it
+			if _, ok := uniqueCheats[c]; ok {
+				continue
+			}
+			uniqueCheats[c] = true
+			dedupedCheatsByStepsSaved[stepsSaved] = append(dedupedCheatsByStepsSaved[stepsSaved], c)
+		}
+	}
+
 	if DEBUG {
 		fmt.Println("Cheats:")
-		for stepsSaved, cheat := range cheatsByStepsSaved {
+		for stepsSaved, cheat := range dedupedCheatsByStepsSaved {
 			fmt.Printf("    Steps Saved: %d\n", stepsSaved)
 			for _, c := range cheat {
 				fmt.Printf("        %v -> %v\n", c.start, c.end)
@@ -240,15 +255,15 @@ func solve(path []simulation.Coord) ([]string, error) {
 	result := []string{"Steps Saved, Count of Cheats"}
 
 	// Extract and sort the keys
-	sortedStepsSaved := make([]int, 0, len(cheatsByStepsSaved))
-	for stepsSaved := range cheatsByStepsSaved {
+	sortedStepsSaved := make([]int, 0, len(dedupedCheatsByStepsSaved))
+	for stepsSaved := range dedupedCheatsByStepsSaved {
 		sortedStepsSaved = append(sortedStepsSaved, stepsSaved)
 	}
 	sort.Ints(sortedStepsSaved)
 
 	// Iterate over the sorted keys
 	for _, stepsSaved := range sortedStepsSaved {
-		cheats := cheatsByStepsSaved[stepsSaved]
+		cheats := dedupedCheatsByStepsSaved[stepsSaved]
 		if stepsSaved >= 100 {
 			totalCheatsGreaterThanOrEqualTo100 += len(cheats)
 		}
@@ -258,20 +273,20 @@ func solve(path []simulation.Coord) ([]string, error) {
 	return result, nil
 }
 
-// canReach returns true if coord1 can reach coord2 in 2 steps
-func canReach(coord1, coord2 simulation.Coord) bool {
+// canReach returns the number of steps it would take to reach coord2 from coord1
+func canReach(coord1, coord2 simulation.Coord) int {
 	// If the coords are the same, then they can reach each other
 	if coord1.X == coord2.X && coord1.Y == coord2.Y {
-		return true
+		return 0
 	}
 
-	// If the coords are within 2 steps of each other, then they can reach each other
+	// If the coords are within 20 steps of each other, then they can reach each other
 	dx := math.Abs(float64(coord1.X - coord2.X))
 	dy := math.Abs(float64(coord1.Y - coord2.Y))
 
-	if (dx == 0 && dy == 2) || (dx == 2 && dy == 0) {
-		return true
+	if dx+dy <= 20 {
+		return int(dx + dy)
 	}
 
-	return false
+	return -1
 }
