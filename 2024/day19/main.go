@@ -70,9 +70,6 @@ func main() {
 	fmt.Printf("Successfully processed %s and created %s\n", INPUT_FILE, OUTPUT_FILE)
 }
 
-type Term string
-type Sentence string
-
 func parseLines(lines []string) ([]Term, []Sentence, error) {
 	// DEBUG := os.Getenv("DEBUG") == "true"
 	fmt.Println("Parsing Input...")
@@ -108,49 +105,182 @@ func parseLines(lines []string) ([]Term, []Sentence, error) {
 	return terms, sentences, nil
 }
 
+type Term string
+type Sentence string
+
+type TrieNode struct {
+	children map[rune]*TrieNode
+	isEnd    bool
+}
+
+func NewTrieNode() *TrieNode {
+	return &TrieNode{
+		children: make(map[rune]*TrieNode),
+		isEnd:    false,
+	}
+}
+
+func (node *TrieNode) Insert(term string) {
+	current := node
+	for _, char := range term {
+		if _, exists := current.children[char]; !exists {
+			current.children[char] = NewTrieNode()
+		}
+		current = current.children[char]
+	}
+	current.isEnd = true
+}
+
+func (node *TrieNode) FindPrefixes(sentence string, start int) []int {
+	prefixes := []int{}
+	current := node
+	for i := start; i < len(sentence); i++ {
+		char := rune(sentence[i])
+		if child, exists := current.children[char]; exists {
+			current = child
+			if current.isEnd {
+				// i+1 because slicing is non-inclusive at the end index
+				prefixes = append(prefixes, i+1)
+			}
+		} else {
+			break
+		}
+	}
+	return prefixes
+}
+
 func solve(terms []Term, sentences []Sentence) ([]string, error) {
 	DEBUG := os.Getenv("DEBUG") == "true"
-	fmt.Println("Beginning single-threaded solve")
+	fmt.Println("Beginning solve...")
+	bar := progressbar.Default(int64(len(sentences)))
 
 	if DEBUG {
 		fmt.Printf("Terms: %v\n", terms)
 		fmt.Printf("Sentences: %v\n", sentences)
 	}
 
-	bar := progressbar.Default(int64(len(sentences)))
-
-	// Memoization map to store results for sentences
-	memo := make(map[Sentence][][]Term)
+	// Build the Trie with all terms
+	trie := NewTrieNode()
+	for _, term := range terms {
+		trie.Insert(string(term))
+		if DEBUG {
+			fmt.Printf("Inserted term into Trie: %s\n", term)
+		}
+	}
 
 	var validSentences int = 0
+	var totalCombinations int = 0
 	for _, sentence := range sentences {
-		decomposedSentence := decomposeSentence(terms, sentence, memo)
-		if decomposedSentence == nil {
-			fmt.Printf("Sentence %s returned nil terms\n", sentence)
-			continue
-		}
-		if len(decomposedSentence) == 0 {
-			fmt.Printf("Sentence %s returned no decomposed terms\n", sentence)
-			continue
-		}
 		if DEBUG {
-			fmt.Printf("Decomposed sentence: %v\n", decomposedSentence)
+			fmt.Printf("Processing sentence: %s\n", sentence)
 		}
-		validSentences++
+		if canDecompose(string(sentence), trie) {
+			if DEBUG {
+				fmt.Printf("Sentence '%s' is valid.\n", sentence)
+			}
+			validSentences++
+			count := countDecompositions(string(sentence), trie)
+			totalCombinations += count
+			if DEBUG {
+				fmt.Printf("Sentence '%s' can be decomposed in %d ways.\n", sentence, count)
+			}
+		} else {
+			if DEBUG {
+				fmt.Printf("Sentence '%s' is invalid.\n", sentence)
+			}
+		}
 		bar.Add(1)
 	}
+
 	result := []string{strconv.Itoa(validSentences)}
-	fmt.Printf("Found %d valid sentences\n", validSentences)
+	fmt.Printf("Found %d valid sentences with %d combinations\n", validSentences, totalCombinations)
 	return result, nil
 }
 
-func decomposeSentence(terms []Term, sentence Sentence, memo map[Sentence][][]Term) [][]Term {
+func canDecompose(sentence string, trie *TrieNode) bool {
+	DEBUG := os.Getenv("DEBUG") == "true"
+	n := len(sentence)
+	if n == 0 {
+		if DEBUG {
+			fmt.Println("Encountered empty sentence during decomposition.")
+		}
+		return true
+	}
+
+	// dp[i] is true if sentence[0:i] can be decomposed into valid terms
+	dp := make([]bool, n+1)
+	dp[0] = true // Empty string
+
+	for i := 0; i < n; i++ {
+		if !dp[i] {
+			continue
+		}
+		prefixEndIndices := trie.FindPrefixes(sentence, i)
+		if DEBUG && len(prefixEndIndices) > 0 {
+			fmt.Printf("At index %d, found prefixes ending at indices: %v\n", i, prefixEndIndices)
+		}
+		for _, end := range prefixEndIndices {
+			if DEBUG {
+				fmt.Printf("Marking dp[%d] as true because sentence[%d:%d] is a valid term.\n", end, i, end)
+			}
+			dp[end] = true
+		}
+	}
+
+	if DEBUG {
+		fmt.Printf("DP Array for sentence '%s': %v\n", sentence, dp)
+	}
+
+	return dp[n]
+}
+
+// countDecompositions returns the number of unique ways to decompose the sentence into terms
+func countDecompositions(sentence string, trie *TrieNode) int {
+	DEBUG := os.Getenv("DEBUG") == "true"
+	n := len(sentence)
+	if n == 0 {
+		if DEBUG {
+			fmt.Println("Encountered empty sentence during decomposition.")
+		}
+		return 1 // One way to decompose an empty string
+	}
+
+	// dp[i] represents the number of ways to decompose sentence[0:i]
+	dp := make([]int, n+1)
+	dp[0] = 1 // Base case: one way to decompose an empty string
+
+	for i := 0; i < n; i++ {
+		if dp[i] == 0 {
+			continue // No valid decompositions ending at i
+		}
+		prefixEndIndices := trie.FindPrefixes(sentence, i)
+		if DEBUG && len(prefixEndIndices) > 0 {
+			fmt.Printf("At index %d, found prefixes ending at indices: %v\n", i, prefixEndIndices)
+		}
+		for _, end := range prefixEndIndices {
+			dp[end] += dp[i]
+			if DEBUG {
+				fmt.Printf("Adding %d to dp[%d], total now: %d\n", dp[i], end, dp[end])
+			}
+		}
+	}
+
+	if DEBUG {
+		fmt.Printf("DP Array for sentence '%s': %v\n", sentence, dp)
+	}
+
+	return dp[n]
+}
+
+// decomposeSentence decomposes the sentence into all possible sequences of terms
+// This function does not functionally work at large scale. It is too slow.
+func decomposeSentence(sentence string, trie *TrieNode, memo map[string][][]Term) [][]Term {
 	DEBUG := os.Getenv("DEBUG") == "true"
 	if DEBUG {
 		fmt.Printf("Decomposing sentence: %s\n", sentence)
 	}
 
-	// If the sentence is empty, return an empty slice
+	// If the sentence is empty, return an empty slice indicating a valid decomposition
 	if len(sentence) == 0 {
 		if DEBUG {
 			fmt.Println("Sentence is empty")
@@ -158,57 +288,62 @@ func decomposeSentence(terms []Term, sentence Sentence, memo map[Sentence][][]Te
 		return [][]Term{}
 	}
 
-	// If the sentence is not empty, but the terms are empty, return nil
-	if len(terms) == 0 {
-		if DEBUG {
-			fmt.Printf("Terms are empty for sentence %s\n", sentence)
-		}
-		memo[sentence] = nil
-		return nil
-	}
-
 	// Check if the result is already memoized
 	if result, found := memo[sentence]; found {
 		if DEBUG {
-			fmt.Printf("Memoized result for sentence %s: %v\n", sentence, result)
+			fmt.Printf("Returning memoized result for sentence '%s': %v\n", sentence, result)
 		}
 		return result
 	}
 
-	// Iterate over the terms to match the sentence
 	decompositions := [][]Term{}
-	for _, term := range terms {
-		if !strings.HasPrefix(string(sentence), string(term)) {
-			continue
-		}
+
+	// Iterate over the sentence to find all prefix matches using the Trie
+	prefixEndIndices := trie.FindPrefixes(sentence, 0)
+	if DEBUG && len(prefixEndIndices) > 0 {
+		fmt.Printf("Found prefixes in sentence '%s' ending at indices: %v\n", sentence, prefixEndIndices)
+	}
+
+	for _, end := range prefixEndIndices {
+		currentTerm := Term(sentence[:end])
 		if DEBUG {
-			fmt.Printf("Found term %s in sentence %s\n", term, sentence)
+			fmt.Printf("Found term '%s' in sentence '%s'\n", currentTerm, sentence)
 		}
 
-		// Recursively decompose the remaining sentence
-		remainingSentence := Sentence(sentence[len(term):])
+		remainingSentence := sentence[end:]
 		if len(remainingSentence) == 0 {
 			if DEBUG {
-				fmt.Printf("The sentence %s is fully matched by term %s\n", sentence, term)
+				fmt.Printf("The sentence '%s' is fully matched by term '%s'\n", sentence, currentTerm)
 			}
-			decompositions = append(decompositions, []Term{term})
+			decompositions = append(decompositions, []Term{currentTerm})
 			continue
 		}
 		if DEBUG {
-			fmt.Printf("Remaining sentence: %s\n", remainingSentence)
+			fmt.Printf("Remaining sentence after term '%s': %s\n", currentTerm, remainingSentence)
 		}
-		subCompositions := decomposeSentence(terms, remainingSentence, memo)
-		if DEBUG {
-			fmt.Printf("Remaining sentence %s can be decomposed %d ways: %v\n", remainingSentence, len(subCompositions), subCompositions)
+
+		subCompositions := decomposeSentence(remainingSentence, trie, memo)
+		if subCompositions == nil {
+			if DEBUG {
+				fmt.Printf("No decompositions found for remaining sentence '%s'\n", remainingSentence)
+			}
+			continue
 		}
+
 		for _, subComposition := range subCompositions {
-			decompositions = append(decompositions, append([]Term{term}, subComposition...))
+			combined := append([]Term{currentTerm}, subComposition...)
+			decompositions = append(decompositions, combined)
+			if DEBUG {
+				fmt.Printf("Combined decomposition: %v\n", combined)
+			}
 		}
 	}
-	// Store the result in the memoization map
+
+	// Memoize the result
 	memo[sentence] = decompositions
 	if DEBUG {
-		fmt.Printf("Sentence %s can be decomposed %d ways: %v\n", sentence, len(memo[sentence]), memo[sentence])
+		fmt.Printf("Sentence '%s' can be decomposed in %d ways: %v\n", sentence, len(decompositions), decompositions)
 	}
-	return memo[sentence]
+
+	return decompositions
 }

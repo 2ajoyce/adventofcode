@@ -4,7 +4,6 @@ import (
 	"day19/internal/aocUtils"
 	"math/rand"
 	"os"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -60,6 +59,19 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+// slicesContains checks if slice 'a' contains all elements of slice 'b' in order.
+func slicesContains(a []Term, b []Term) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func TestDecomposeSentence(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -71,7 +83,7 @@ func TestDecomposeSentence(t *testing.T) {
 			name:     "Empty terms",
 			terms:    []Term{},
 			sentence: Sentence("r"),
-			expected: nil,
+			expected: [][]Term{},
 		},
 		{
 			name:     "Empty sentence",
@@ -119,7 +131,7 @@ func TestDecomposeSentence(t *testing.T) {
 			name:     "Unsolvable sentence",
 			terms:    []Term{"r", "w"},
 			sentence: Sentence("rbw"),
-			expected: nil,
+			expected: [][]Term{},
 		},
 		{
 			name:     "Large Term is a trap",
@@ -131,34 +143,46 @@ func TestDecomposeSentence(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			results := decomposeSentence(tt.terms, tt.sentence, make(map[Sentence][][]Term))
-			if results == nil && tt.expected != nil {
-				t.Errorf("Expected result to be non-nil")
+			// Build the Trie
+			trie := NewTrieNode()
+			for _, term := range tt.terms {
+				trie.Insert(string(term))
 			}
+			// Perform decomposition
+			results := decomposeSentence(string(tt.sentence), trie, make(map[string][][]Term))
+
+			// Handle expected nil results
+			if tt.expected == nil {
+				if results != nil {
+					t.Errorf("Expected result to be nil, but got: %v", results)
+				}
+				return
+			}
+
+			// Handle empty expected results
+			if len(tt.expected) == 0 {
+				if len(results) != 0 {
+					t.Errorf("Expected empty result, but got: %v", results)
+				}
+				return
+			}
+
+			// Check the number of decompositions
 			if len(results) != len(tt.expected) {
-				t.Errorf("Expected result to have %d elements, but got: %v", len(tt.expected), results)
+				t.Errorf("Expected %d decompositions, but got %d: %v", len(tt.expected), len(results), results)
 			}
-			for _, result := range results {
-				// Check to see if the result is in the slice of expected results
+
+			// Check each expected decomposition is present in the results
+			for _, expectedDecomp := range tt.expected {
 				found := false
-				for _, expected := range tt.expected {
-					if len(result) != len(expected) {
-						continue
-					}
-					match := true
-					for _, term := range result {
-						if !slices.Contains(expected, term) {
-							match = false
-							break
-						}
-					}
-					if match {
+				for _, resultDecomp := range results {
+					if slicesContains(resultDecomp, expectedDecomp) {
 						found = true
 						break
 					}
 				}
 				if !found {
-					t.Errorf("Expected results to contain %v, but got: %v", tt.expected, results)
+					t.Errorf("Expected decomposition %v not found in results: %v", expectedDecomp, results)
 				}
 			}
 		})
@@ -197,9 +221,8 @@ func shuffle(s string) string {
 }
 
 func TestMainBig(t *testing.T) {
-	os.Setenv("DEBUG", "false")
 	sentence := "abcd"
-	sentence = strings.Repeat(sentence, 30)
+	sentence = strings.Repeat(sentence, 31)
 	sentence = shuffle(sentence)
 	input := []string{
 		"a, b, c, d, ab, bc, cd, abc, bcd, abcd",
