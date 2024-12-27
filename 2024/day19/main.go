@@ -4,9 +4,10 @@ import (
 	"day19/internal/aocUtils"
 	"fmt"
 	"os"
-	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/schollz/progressbar/v3"
 )
 
 func main() {
@@ -116,12 +117,14 @@ func solve(terms []Term, sentences []Sentence) ([]string, error) {
 		fmt.Printf("Sentences: %v\n", sentences)
 	}
 
+	bar := progressbar.Default(int64(len(sentences)))
+
+	// Memoization map to store results for sentences
+	memo := make(map[Sentence][][]Term)
+
 	var validSentences int = 0
 	for _, sentence := range sentences {
-		decomposedSentence, err := decomposeSentence(terms, sentence)
-		if err != nil {
-			return nil, fmt.Errorf("Error decomposing sentence: %v", err)
-		}
+		decomposedSentence := decomposeSentence(terms, sentence, memo)
 		if decomposedSentence == nil {
 			fmt.Printf("Sentence %s returned nil terms\n", sentence)
 			continue
@@ -134,13 +137,14 @@ func solve(terms []Term, sentences []Sentence) ([]string, error) {
 			fmt.Printf("Decomposed sentence: %v\n", decomposedSentence)
 		}
 		validSentences++
+		bar.Add(1)
 	}
 	result := []string{strconv.Itoa(validSentences)}
 	fmt.Printf("Found %d valid sentences\n", validSentences)
 	return result, nil
 }
 
-func decomposeSentence(terms []Term, sentence Sentence) ([]Term, error) {
+func decomposeSentence(terms []Term, sentence Sentence, memo map[Sentence][][]Term) [][]Term {
 	DEBUG := os.Getenv("DEBUG") == "true"
 	if DEBUG {
 		fmt.Printf("Decomposing sentence: %s\n", sentence)
@@ -148,43 +152,63 @@ func decomposeSentence(terms []Term, sentence Sentence) ([]Term, error) {
 
 	// If the sentence is empty, return an empty slice
 	if len(sentence) == 0 {
-		return []Term{}, nil
+		if DEBUG {
+			fmt.Println("Sentence is empty")
+		}
+		return [][]Term{}
 	}
 
 	// If the sentence is not empty, but the terms are empty, return nil
 	if len(terms) == 0 {
-		return nil, nil
+		if DEBUG {
+			fmt.Printf("Terms are empty for sentence %s\n", sentence)
+		}
+		memo[sentence] = nil
+		return nil
 	}
 
-	var decomposedTerms []Term = make([]Term, 0)
-
-	// Sort the terms largest to smallest so that we can greedily match the largest terms first
-	termSort := func(i, j Term) int {
-		return len(j) - len(i)
+	// Check if the result is already memoized
+	if result, found := memo[sentence]; found {
+		if DEBUG {
+			fmt.Printf("Memoized result for sentence %s: %v\n", sentence, result)
+		}
+		return result
 	}
-	slices.SortFunc(terms, termSort)
 
-	// Iterate over the sentence and try to match the terms
-	for i := 0; i < len(sentence); i++ {
-		// Iterate over the terms
-		for j := 0; j < len(terms); j++ {
-			// If the term matches the sentence, add it to the decomposed terms
-			if strings.HasPrefix(string(sentence[i:]), string(terms[j])) {
-				decomposedTerms = append(decomposedTerms, terms[j])
-				i += len(terms[j]) - 1
-				break
+	// Iterate over the terms to match the sentence
+	decompositions := [][]Term{}
+	for _, term := range terms {
+		if !strings.HasPrefix(string(sentence), string(term)) {
+			continue
+		}
+		if DEBUG {
+			fmt.Printf("Found term %s in sentence %s\n", term, sentence)
+		}
+
+		// Recursively decompose the remaining sentence
+		remainingSentence := Sentence(sentence[len(term):])
+		if len(remainingSentence) == 0 {
+			if DEBUG {
+				fmt.Printf("The sentence %s is fully matched by term %s\n", sentence, term)
 			}
+			decompositions = append(decompositions, []Term{term})
+			continue
+		}
+		if DEBUG {
+			fmt.Printf("Remaining sentence: %s\n", remainingSentence)
+		}
+		subCompositions := decomposeSentence(terms, remainingSentence, memo)
+		if DEBUG {
+			fmt.Printf("Remaining sentence %s can be decomposed %d ways: %v\n", remainingSentence, len(subCompositions), subCompositions)
+		}
+		for _, subComposition := range subCompositions {
+			decompositions = append(decompositions, append([]Term{term}, subComposition...))
 		}
 	}
-
-	// Verify that the decomposed terms can be recombined to form the original sentence
-	var recombinedSentence Sentence
-	for _, term := range decomposedTerms {
-		recombinedSentence += Sentence(term)
+	// Store the result in the memoization map
+	memo[sentence] = decompositions
+	if DEBUG {
+		fmt.Printf("Sentence %s can be decomposed %d ways: %v\n", sentence, len(memo[sentence]), memo[sentence])
 	}
-	if recombinedSentence != sentence {
-		return nil, nil
-	}
-
-	return decomposedTerms, nil
+	return memo[sentence]
 }
