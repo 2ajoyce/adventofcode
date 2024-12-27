@@ -138,10 +138,6 @@ func findPath(grid [][]rune, startCoord, endCoord simulation.Coord) []simulation
 	for currentCoord != endCoord {
 		priorCoords = append(priorCoords, currentCoord)
 		neighbors := currentCoord.GetNeighbors()
-		if DEBUG {
-			gridString := stringifyGrid(grid, []GridMask{{coords: path, mask: '@'}, {coords: neighbors, mask: 'N'}}, 4)
-			fmt.Println(gridString)
-		}
 		for _, neighbor := range neighbors {
 			if neighbor.X < 0 || neighbor.Y < 0 || neighbor.Y >= len(grid) || neighbor.X >= len(grid[0]) {
 				continue
@@ -170,7 +166,13 @@ func findPath(grid [][]rune, startCoord, endCoord simulation.Coord) []simulation
 	}
 
 	if DEBUG {
-		fmt.Printf("Path Found: %v\n", path)
+		if len(path) < 10 {
+			fmt.Printf("    Path Found: %v\n", path)
+		} else {
+			fmt.Println("    Path Found")
+			fmt.Printf("    First 5 Elements: %v\n", path[:5])
+			fmt.Printf("    Last 5 Elements: %v\n", path[len(path)-5:])
+		}
 		gridString := stringifyGrid(grid, []GridMask{{coords: path, mask: '@'}}, 4)
 		fmt.Println(gridString)
 	}
