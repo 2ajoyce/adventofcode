@@ -146,7 +146,7 @@ func TestCalculateCost(t *testing.T) {
 }
 
 func TestGenerateOptimalNumericValuesForCoordSimple(t *testing.T) {
-	depth := 1
+	depth := 2
 	input := '9'
 	expectedOutput := "v<<A>>^AAAvA^A"
 	optimalValueMap := generateOptimalDirectionalValues() // This is non-deterministic, which is why we run it multiple times
@@ -159,7 +159,7 @@ func TestGenerateOptimalNumericValuesForCoordSimple(t *testing.T) {
 }
 
 func TestGenerateOptimalNumericValuesForCoord(t *testing.T) {
-	depth := 1
+	depth := 2
 	// This test case is slow, but it fully captures the inputs returning multiple outputs when run from the initial position
 	testCases := []struct {
 		input           rune
