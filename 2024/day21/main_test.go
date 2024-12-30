@@ -3,7 +3,9 @@ package main
 import (
 	"day21/internal/aocUtils"
 	"day21/internal/day21"
+	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -87,38 +89,293 @@ func TestMainExampleSmall(t *testing.T) {
 	validateOutput(t, expectedOutput)
 }
 
-func TestComplexMachine(t *testing.T) {
-	// 7 8 9
-	// 4 5 6
-	// 1 2 3
-	// _ 0 A
-
-	// _ ^ A
-	// < v >
-    
-	//            3  
-	//        ^   A         <
-	//    <   A > A  v <<   A
-	// <v<A>>^AvA^A<vA<AA>>^A
-	// v<<A>>^AvA^A
-
+func TestMainBaseCases(t *testing.T) {
 	testCases := []struct {
-		input          rune
+		input          string
 		expectedOutput string
 	}{
-		{input: '3', expectedOutput: "<v<A>>^AvA^A<vA<AA>"},
-		{input: '0', expectedOutput: "<vA<AA>>^AvAA<^A>A"},
-		{input: '9', expectedOutput: "<v<A>>^AAAvA^A<vA<AA>>^AvAA<^A>A<"},
+		{input: "0A", expectedOutput: "0"},
+		{input: "1A", expectedOutput: "48"},
+		{input: "2A", expectedOutput: "76"},
+		{input: "3A", expectedOutput: "84"},
+		{input: "4A", expectedOutput: "200"},
+		{input: "5A", expectedOutput: "200"},
+		{input: "6A", expectedOutput: "180"},
+		{input: "7A", expectedOutput: "364"},
+		{input: "8A", expectedOutput: "336"},
+		{input: "9A", expectedOutput: "288"},
+	}
+	for _, tc := range testCases {
+		tc := tc // capture range variable
+		t.Run(string(tc.input), func(t *testing.T) {
+			aocUtils.WriteToFile(INPUT_FILE, []string{tc.input})
+			main()
+			validateOutput(t, []string{tc.expectedOutput})
+		})
+	}
+}
+
+func TestCalculateCost(t *testing.T) {
+	testCases := []struct {
+		code         string
+		inputLen     int
+		expectedCost int
+	}{
+		{code: "0A", inputLen: 5, expectedCost: 0},
+		{code: "1A", inputLen: 5, expectedCost: 5},
+		{code: "2A", inputLen: 5, expectedCost: 10},
+		{code: "3A", inputLen: 5, expectedCost: 15},
+		{code: "4A", inputLen: 5, expectedCost: 20},
+		{code: "5A", inputLen: 5, expectedCost: 25},
+		{code: "6A", inputLen: 5, expectedCost: 30},
+		{code: "7A", inputLen: 5, expectedCost: 35},
+		{code: "8A", inputLen: 5, expectedCost: 40},
+		{code: "9A", inputLen: 5, expectedCost: 45},
+		{code: "10A", inputLen: 5, expectedCost: 50},
 	}
 
 	for _, tc := range testCases {
 		tc := tc // capture range variable
-		t.Run(string(tc.input), func(t *testing.T) {
-			c := day21.Coord{X: 2, Y: 3} // Default starting position
-			output := complexMachine1(c, tc.input)
-			if output != tc.expectedOutput {
-				t.Errorf("Expected output to be '%s', but got '%s'", tc.expectedOutput, output)
+		t.Run(tc.code, func(t *testing.T) {
+			cost, _ := calculateCost(tc.code, tc.inputLen)
+			if cost != tc.expectedCost {
+				t.Errorf("Expected cost: %d, got: %d", tc.expectedCost, cost)
 			}
 		})
+	}
+}
+
+func TestComplexMachine1BaseCases(t *testing.T) {
+	// This test case is slow, but it fully captures the inputs returning multiple outputs when run from the initial position
+	testCases := []struct {
+		input           rune
+		possibleOutputs []string
+	}{
+		{input: '0', possibleOutputs: []string{"<vA<AA>>^AvAA<^A>A", "<vA<AA>>^AvAA^<A>A", "v<A<AA>>^AvAA<^A>A", "v<A<AA>>^AvAA^<A>A"}},
+		{input: '1', possibleOutputs: []string{"v<<A>>^A<vA<A>>^AAvAA<^A>A", "v<<A>>^Av<A<A>>^AAvAA<^A>A", "v<<A>>^A<vA<A>>^AAvAA^<A>A", "v<<A>>^Av<A<A>>^AAvAA^<A>A"}},
+		{input: '2', possibleOutputs: []string{"v<A<AA>>^AvA<^A>AvA^A", "<vA<AA>>^AvA^<A>AvA^A", "<vA<AA>>^AvA<^A>AvA^A", "v<A<AA>>^AvA^<A>AvA^A"}},
+		{input: '3', possibleOutputs: []string{"v<<A>>^AvA^A"}},
+		{input: '4', possibleOutputs: []string{"v<<A>>^AAv<A<A>>^AAvAA<^A>A", "v<<A>>^AA<vA<A>>^AAvAA<^A>A", "v<<A>>^AA<vA<A>>^AAvAA^<A>A", "v<<A>>^AAv<A<A>>^AAvAA^<A>A"}},
+		{input: '5', possibleOutputs: []string{"<vA<AA>>^AvA^<A>AAvA^A", "<vA<AA>>^AvA<^A>AAvA^A", "v<A<AA>>^AvA<^A>AAvA^A", "v<A<AA>>^AvA^<A>AAvA^A"}},
+		{input: '6', possibleOutputs: []string{"v<<A>>^AAvA^A"}},
+		{input: '7', possibleOutputs: []string{"v<<A>>^AAA<vA<A>>^AAvAA<^A>A", "v<<A>>^AAAv<A<A>>^AAvAA<^A>A", "v<<A>>^AAA<vA<A>>^AAvAA^<A>A", "v<<A>>^AAAv<A<A>>^AAvAA^<A>A"}},
+		{input: '8', possibleOutputs: []string{"v<A<AA>>^AvA<^A>AAAvA^A", "<vA<AA>>^AvA<^A>AAAvA^A", "<vA<AA>>^AvA^<A>AAAvA^A", "v<A<AA>>^AvA^<A>AAAvA^A"}},
+		{input: '9', possibleOutputs: []string{"v<<A>>^AAAvA^A"}},
+		{input: 'A', possibleOutputs: []string{""}},
+	}
+	outputsSeen := make(map[rune]map[string]int)
+	for i := range 200 {
+		t.Logf("Test %d\n", i)
+		for _, tc := range testCases {
+			tc := tc // capture range variable
+			t.Run(string(tc.input), func(t *testing.T) {
+				c := day21.Coord{X: 2, Y: 3} // Default starting position
+				output := complexMachine1(c, tc.input)
+				if !slices.Contains(tc.possibleOutputs, output) {
+					t.Errorf("Expected output to contain %s, but got %s", tc.possibleOutputs, output)
+				}
+				if _, ok := outputsSeen[tc.input]; !ok {
+					outputsSeen[tc.input] = make(map[string]int)
+				}
+				outputsSeen[tc.input][output]++
+			})
+		}
+	}
+	// Check that the count of outputs seen is the same as the count of expected outputs for each test case
+	for _, tc := range testCases {
+		tc := tc // capture range variable
+		outputsSeenCount := len(outputsSeen[tc.input])
+		if outputsSeenCount != len(tc.possibleOutputs) {
+			e := fmt.Sprintf("\nTest Case: %s\n", string(tc.input))
+			e += fmt.Sprintf("    Expected %d unique outputs, but got %d\n", len(tc.possibleOutputs), outputsSeenCount)
+			for k, v := range outputsSeen[tc.input] {
+				e += fmt.Sprintf("        %s: %d\n", k, v)
+			}
+			t.Error(e)
+		}
+
+	}
+}
+
+func TestComplexMachine2BaseCase(t *testing.T) {
+	testCases := []struct {
+		coord           day21.Coord
+		input           rune
+		possibleOutputs []string
+	}{
+		{coord: day21.Coord{X: 2, Y: 0}, input: '^', possibleOutputs: []string{"<A"}},
+		{coord: day21.Coord{X: 2, Y: 0}, input: '<', possibleOutputs: []string{"<v<A", "v<<A"}},
+		{coord: day21.Coord{X: 2, Y: 0}, input: 'v', possibleOutputs: []string{"<vA", "v<A"}},
+		{coord: day21.Coord{X: 2, Y: 0}, input: '>', possibleOutputs: []string{"vA"}},
+		{coord: day21.Coord{X: 2, Y: 0}, input: 'A', possibleOutputs: []string{"A"}},
+	}
+
+	outputsSeen := make(map[rune]map[string]int)
+	for i := range 20 {
+		t.Logf("Test %d\n", i)
+		for _, tc := range testCases {
+			tc := tc // capture range variable
+			t.Run(fmt.Sprintf("Coord: (%d, %d), Input: %c", tc.coord.X, tc.coord.Y, tc.input), func(t *testing.T) {
+				output := complexMachine2(tc.coord, tc.input)
+				if !slices.Contains(tc.possibleOutputs, output) {
+					t.Errorf("Expected output to contain %s, but got %s", tc.possibleOutputs, output)
+				}
+				if _, ok := outputsSeen[tc.input]; !ok {
+					outputsSeen[tc.input] = make(map[string]int)
+				}
+				outputsSeen[tc.input][output]++
+			})
+		}
+	}
+	// Check that the count of outputs seen is the same as the count of expected outputs for each test case
+	for _, tc := range testCases {
+		tc := tc // capture range variable
+		outputsSeenCount := len(outputsSeen[tc.input])
+		if outputsSeenCount != len(tc.possibleOutputs) {
+			e := fmt.Sprintf("\nTest Case: %s\n", string(tc.input))
+			e += fmt.Sprintf("    Expected %d unique outputs, but got %d\n", len(tc.possibleOutputs), outputsSeenCount)
+			for k, v := range outputsSeen[tc.input] {
+				e += fmt.Sprintf("        %s: %d\n", k, v)
+			}
+			t.Error(e)
+		}
+
+	}
+}
+
+func TestComplexMachine2SecondLocation(t *testing.T) {
+	testCases := []struct {
+		coord           day21.Coord
+		input           rune
+		possibleOutputs []string
+	}{
+		{coord: day21.Coord{X: 0, Y: 1}, input: '^', possibleOutputs: []string{">^A"}},
+		{coord: day21.Coord{X: 0, Y: 1}, input: '<', possibleOutputs: []string{"A"}},
+		{coord: day21.Coord{X: 0, Y: 1}, input: 'v', possibleOutputs: []string{">A"}},
+		{coord: day21.Coord{X: 0, Y: 1}, input: '>', possibleOutputs: []string{">>A"}},
+		{coord: day21.Coord{X: 0, Y: 1}, input: 'A', possibleOutputs: []string{">>^A", ">^>A"}},
+	}
+
+	outputsSeen := make(map[rune]map[string]int)
+	for i := range 20 {
+		t.Logf("Test %d\n", i)
+		for _, tc := range testCases {
+			tc := tc // capture range variable
+			t.Run(fmt.Sprintf("Coord: (%d, %d), Input: %c", tc.coord.X, tc.coord.Y, tc.input), func(t *testing.T) {
+				output := complexMachine2(tc.coord, tc.input)
+				if !slices.Contains(tc.possibleOutputs, output) {
+					t.Errorf("Expected output to contain %s, but got %s", tc.possibleOutputs, output)
+				}
+				if _, ok := outputsSeen[tc.input]; !ok {
+					outputsSeen[tc.input] = make(map[string]int)
+				}
+				outputsSeen[tc.input][output]++
+			})
+		}
+	}
+	// Check that the count of outputs seen is the same as the count of expected outputs for each test case
+	for _, tc := range testCases {
+		tc := tc // capture range variable
+		outputsSeenCount := len(outputsSeen[tc.input])
+		if outputsSeenCount != len(tc.possibleOutputs) {
+			e := fmt.Sprintf("\nTest Case: %s\n", string(tc.input))
+			e += fmt.Sprintf("    Expected %d unique outputs, but got %d\n", len(tc.possibleOutputs), outputsSeenCount)
+			for k, v := range outputsSeen[tc.input] {
+				e += fmt.Sprintf("        %s: %d\n", k, v)
+			}
+			t.Error(e)
+		}
+
+	}
+}
+func TestComplexMachine3BaseCase(t *testing.T) {
+	testCases := []struct {
+		coord           day21.Coord
+		input           rune
+		possibleOutputs []string
+	}{
+		{coord: day21.Coord{X: 2, Y: 0}, input: '^', possibleOutputs: []string{"<A"}},
+		{coord: day21.Coord{X: 2, Y: 0}, input: '<', possibleOutputs: []string{"v<<A"}},
+		{coord: day21.Coord{X: 2, Y: 0}, input: 'v', possibleOutputs: []string{"<vA", "v<A"}},
+		{coord: day21.Coord{X: 2, Y: 0}, input: '>', possibleOutputs: []string{"vA"}},
+		{coord: day21.Coord{X: 2, Y: 0}, input: 'A', possibleOutputs: []string{"A"}},
+	}
+
+	outputsSeen := make(map[rune]map[string]int)
+	for i := range 20 {
+		t.Logf("Test %d\n", i)
+		for _, tc := range testCases {
+			tc := tc // capture range variable
+			t.Run(fmt.Sprintf("Coord: (%d, %d), Input: %c", tc.coord.X, tc.coord.Y, tc.input), func(t *testing.T) {
+				output := complexMachine3(tc.coord, tc.input)
+				if !slices.Contains(tc.possibleOutputs, output) {
+					t.Errorf("Expected output to contain %s, but got %s", tc.possibleOutputs, output)
+				}
+				if _, ok := outputsSeen[tc.input]; !ok {
+					outputsSeen[tc.input] = make(map[string]int)
+				}
+				outputsSeen[tc.input][output]++
+			})
+		}
+	}
+	// Check that the count of outputs seen is the same as the count of expected outputs for each test case
+	for _, tc := range testCases {
+		tc := tc // capture range variable
+		outputsSeenCount := len(outputsSeen[tc.input])
+		if outputsSeenCount != len(tc.possibleOutputs) {
+			e := fmt.Sprintf("\nTest Case: %s\n", string(tc.input))
+			e += fmt.Sprintf("    Expected %d unique outputs, but got %d\n", len(tc.possibleOutputs), outputsSeenCount)
+			for k, v := range outputsSeen[tc.input] {
+				e += fmt.Sprintf("        %s: %d\n", k, v)
+			}
+			t.Error(e)
+		}
+
+	}
+}
+
+func TestComplexMachine3SecondLocation(t *testing.T) {
+	testCases := []struct {
+		coord           day21.Coord
+		input           rune
+		possibleOutputs []string
+	}{
+		{coord: day21.Coord{X: 0, Y: 1}, input: '^', possibleOutputs: []string{">^A"}},
+		{coord: day21.Coord{X: 0, Y: 1}, input: '<', possibleOutputs: []string{"A"}},
+		{coord: day21.Coord{X: 0, Y: 1}, input: 'v', possibleOutputs: []string{">A"}},
+		{coord: day21.Coord{X: 0, Y: 1}, input: '>', possibleOutputs: []string{">>A"}},
+		{coord: day21.Coord{X: 0, Y: 1}, input: 'A', possibleOutputs: []string{">>^A"}},
+	}
+
+	outputsSeen := make(map[rune]map[string]int)
+	for i := range 20 {
+		t.Logf("Test %d\n", i)
+		for _, tc := range testCases {
+			tc := tc // capture range variable
+			t.Run(fmt.Sprintf("Coord: (%d, %d), Input: %c", tc.coord.X, tc.coord.Y, tc.input), func(t *testing.T) {
+				output := complexMachine3(tc.coord, tc.input)
+				if !slices.Contains(tc.possibleOutputs, output) {
+					t.Errorf("Expected output to contain %s, but got %s", tc.possibleOutputs, output)
+				}
+				if _, ok := outputsSeen[tc.input]; !ok {
+					outputsSeen[tc.input] = make(map[string]int)
+				}
+				outputsSeen[tc.input][output]++
+			})
+		}
+	}
+	// Check that the count of outputs seen is the same as the count of expected outputs for each test case
+	for _, tc := range testCases {
+		tc := tc // capture range variable
+		outputsSeenCount := len(outputsSeen[tc.input])
+		if outputsSeenCount != len(tc.possibleOutputs) {
+			e := fmt.Sprintf("\nTest Case: %s\n", string(tc.input))
+			e += fmt.Sprintf("    Expected %d unique outputs, but got %d\n", len(tc.possibleOutputs), outputsSeenCount)
+			for k, v := range outputsSeen[tc.input] {
+				e += fmt.Sprintf("        %s: %d\n", k, v)
+			}
+			t.Error(e)
+		}
+
 	}
 }

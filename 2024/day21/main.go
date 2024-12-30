@@ -143,7 +143,6 @@ func complexMachine1(c day21.Coord, input rune) string {
 	nk.SetCurrentPosition(c.X, c.Y)
 	nkmArray := nk.CalculateMovements(input)
 	if len(nkmArray) == 0 {
-		fmt.Printf("NK: No movements for %v, %c\n", nk.GetCurrentPosition(), input)
 		return ""
 	}
 
@@ -161,18 +160,13 @@ func complexMachine1(c day21.Coord, input rune) string {
 
 	smallestOutput := ""
 	for _, nkm := range nkmArray {
-		fmt.Printf("NKM: %s\n", nkm)
 		output := ""
 		dk1 := day21.NewDirectionalKeypad()
 		for _, nkmChar := range nkm {
-			fmt.Printf("NKM Char: %c\n", nkmChar)
 			dk2 := day21.NewDirectionalKeypad()
 			dk1Movement := optimalValues[dk1.GetCurrentPosition()][nkmChar]
-			fmt.Printf("    DK1 Movement: %s\n", dk1Movement)
 			for _, dk1Char := range dk1Movement {
-				fmt.Printf("    DK1 Char: %c\n", dk1Char)
 				dk2Movement := optimalValues[dk2.GetCurrentPosition()][dk1Char]
-				fmt.Printf("        DK2 Movement: %s\n", dk2Movement)
 				output += dk2Movement
 				dk2.Move(dk2Movement)
 			}
@@ -190,7 +184,6 @@ func complexMachine2(c day21.Coord, input rune) string {
 	dk.SetCurrentPosition(c.X, c.Y)
 	dkArray := dk.CalculateMovements(input)
 	if len(dkArray) == 0 {
-		fmt.Printf("DK: No movements for %v, %c\n", dk.GetCurrentPosition(), input)
 		return "A"
 	}
 	smallestOutput := []rune{}
@@ -211,14 +204,11 @@ func complexMachine3(c day21.Coord, input rune) string {
 	dk.SetCurrentPosition(c.X, c.Y)
 	dkArray := dk.CalculateMovements(input)
 	if len(dkArray) == 0 {
-		fmt.Printf("DK: No movements for %v, %c\n", dk.GetCurrentPosition(), input)
 		return "A"
 	}
 	smallestOutput := []rune{}
 	smallest2xDeepOutput := []rune{}
-	if c.X == 2 && c.Y == 0 && input == '<' {
-		fmt.Printf("input: %c, dkArray: %v\n", input, dkArray)
-	}
+
 	for _, dkm := range dkArray {
 		output := []rune{}
 		dk1 := day21.NewDirectionalKeypad()
@@ -228,9 +218,6 @@ func complexMachine3(c day21.Coord, input rune) string {
 				output = append(output, char)
 			}
 			dk1.Move(path)
-		}
-		if c.X == 2 && c.Y == 0 && input == '<' {
-			fmt.Printf("dkm: %s, smallestOutput: %s, output: %s\n", dkm, string(smallest2xDeepOutput), string(output))
 		}
 		if len(output) < len(smallest2xDeepOutput) || len(smallest2xDeepOutput) == 0 {
 			smallest2xDeepOutput = output
