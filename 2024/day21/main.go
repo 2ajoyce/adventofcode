@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+
+	"github.com/schollz/progressbar/v3"
 )
 
 func main() {
@@ -132,6 +134,7 @@ func solve(codes []string) ([]string, error) {
 func generateOptimalNumericValues(depth int) optimalValueMap {
 	optimalDirectionalValues := generateOptimalDirectionalValues()
 
+	bar := progressbar.Default(int64(3 * 4 * 11))
 	// Create a map of the shortest possible outputs for each integer 0-9
 	optimizedValues := make(map[day21.Coord]map[rune]string)
 	for x := 0; x < 3; x++ {
@@ -143,29 +146,27 @@ func generateOptimalNumericValues(depth int) optimalValueMap {
 			}
 			// Find the optimal values for A also
 			optimizedValues[c]['A'] = generateOptimalNumericValuesForCoord(optimalDirectionalValues, c, 'A', depth)
+			bar.Add(1)
 		}
 	}
 	return optimizedValues
 }
 
+// type optimalValueMap map[day21.Coord]map[rune]string
+
 func recursiveFunc(optimalValues optimalValueMap, dk1 *day21.DirectionalKeypad, priorChar rune, depth int) string {
-	// indent := strings.Repeat("   ", 2-depth)
 	output := ""
-	// fmt.Printf("%sDepth: %d\n", indent, depth)
-	dk2 := day21.NewDirectionalKeypad() // Depth = 2
-	dk1Movement := optimalValues[dk1.GetCurrentPosition()][priorChar]
-	// fmt.Printf("%sdk%dMovement: %s\n", indent, depth, dk1Movement)
+	currentCoord := dk1.GetCurrentPosition()
+	dk1Movement := optimalValues[currentCoord][priorChar]
 	if depth == 0 {
-		// fmt.Printf("%sDepth 0: Returning: %s\n", indent, dk1Movement)
 		dk1.Move(dk1Movement)
 		return dk1Movement
 	}
+	dk2 := day21.NewDirectionalKeypad()
 	for _, dk1Char := range dk1Movement {
-		// fmt.Printf("%sRecursing: %c\n", indent, dk1Char)
 		output += recursiveFunc(optimalValues, dk2, dk1Char, depth-1)
 	}
 	dk1.Move(dk1Movement)
-	// fmt.Printf("%sReturning: %s\n", indent, output)
 	return output
 }
 
@@ -180,10 +181,8 @@ func generateOptimalNumericValuesForCoord(optimalValues optimalValueMap, c day21
 	smallestOutput := ""
 	for _, nkm := range nkmArray {
 		output := ""
-		dk1 := day21.NewDirectionalKeypad() // Depth = 1
-		// fmt.Printf("NKM: %s\n", nkm)
+		dk1 := day21.NewDirectionalKeypad()
 		for _, nkmChar := range nkm {
-			// fmt.Printf("NKM Char: %c\n", nkmChar)
 			output += recursiveFunc(optimalValues, dk1, nkmChar, depth)
 		}
 		if len(output) < len(smallestOutput) || smallestOutput == "" {
