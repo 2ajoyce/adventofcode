@@ -87,6 +87,8 @@ func parseLines(lines []string) ([]string, error) {
 	return codes, nil
 }
 
+type optimalValueMap map[day21.Coord]map[rune]string
+
 func solve(codes []string) ([]string, error) {
 	DEBUG := os.Getenv("DEBUG") == "true"
 	fmt.Println("Beginning solve...")
@@ -98,6 +100,8 @@ func solve(codes []string) ([]string, error) {
 		}
 	}
 
+	optimalDirectionalValues := generateOptimalDirectionalValues()
+
 	// Create a map of the shortest possible outputs for each integer 0-9
 	optimizedValues := make(map[day21.Coord]map[rune]string)
 	for x := 0; x < 3; x++ {
@@ -105,10 +109,10 @@ func solve(codes []string) ([]string, error) {
 			c := day21.Coord{X: x, Y: y}
 			optimizedValues[c] = make(map[rune]string)
 			for i := 0; i < 10; i++ {
-				optimizedValues[c][rune(i+48)] = complexMachine1(c, rune(i+48))
+				optimizedValues[c][rune(i+48)] = complexMachine1(optimalDirectionalValues, c, rune(i+48))
 			}
 			// Find the optimal values for A also
-			optimizedValues[c]['A'] = complexMachine1(c, 'A')
+			optimizedValues[c]['A'] = complexMachine1(optimalDirectionalValues, c, 'A')
 		}
 	}
 	for k, v := range optimizedValues[day21.Coord{X: 2, Y: 3}] {
@@ -136,26 +140,12 @@ func solve(codes []string) ([]string, error) {
 	return []string{totalCostStr}, nil
 }
 
-type type1 map[day21.Coord]map[rune]string
-
-func complexMachine1(c day21.Coord, input rune) string {
+func complexMachine1(optimalValues optimalValueMap, c day21.Coord, input rune) string {
 	nk := day21.NewNumericKeypad()
 	nk.SetCurrentPosition(c.X, c.Y)
 	nkmArray := nk.CalculateMovements(input)
 	if len(nkmArray) == 0 {
 		return ""
-	}
-
-	optimalValues := make(map[day21.Coord]map[rune]string)
-	possibleRunes := []rune{'<', '>', '^', 'v', 'A'}
-	for x := 0; x < 3; x++ {
-		for y := 0; y < 2; y++ {
-			c := day21.Coord{X: x, Y: y}
-			optimalValues[c] = make(map[rune]string)
-			for _, r := range possibleRunes {
-				optimalValues[c][r] = complexMachine3(day21.Coord{X: x, Y: y}, r)
-			}
-		}
 	}
 
 	smallestOutput := ""
@@ -179,7 +169,50 @@ func complexMachine1(c day21.Coord, input rune) string {
 	return smallestOutput
 }
 
-func complexMachine2(c day21.Coord, input rune) string {
+func generateOptimalDirectionalValues() optimalValueMap {
+	optimalDirectionalValues := make(optimalValueMap)
+	possibleRunes := []rune{'<', '>', '^', 'v', 'A'}
+	for x := 0; x < 3; x++ {
+		for y := 0; y < 2; y++ {
+			c := day21.Coord{X: x, Y: y}
+			optimalDirectionalValues[c] = make(map[rune]string)
+			for _, r := range possibleRunes {
+				optimalDirectionalValues[c][r] = generateOptimalDirectionalValuesForCoord(day21.Coord{X: x, Y: y}, r)
+			}
+		}
+	}
+	return optimalDirectionalValues
+}
+
+func generateOptimalDirectionalValuesForCoord(c day21.Coord, input rune) string {
+	dk := day21.NewDirectionalKeypad()
+	dk.SetCurrentPosition(c.X, c.Y)
+	dkArray := dk.CalculateMovements(input)
+	if len(dkArray) == 0 {
+		return "A"
+	}
+	smallestOutput := []rune{}
+	smallest2xDeepOutput := []rune{}
+
+	for _, dkm := range dkArray {
+		output := []rune{}
+		dk1 := day21.NewDirectionalKeypad()
+		for _, dkChar := range dkm {
+			path := generateDirectionalValuesForCoord(dk1.GetCurrentPosition(), dkChar)
+			for _, char := range path {
+				output = append(output, char)
+			}
+			dk1.Move(path)
+		}
+		if len(output) < len(smallest2xDeepOutput) || len(smallest2xDeepOutput) == 0 {
+			smallest2xDeepOutput = output
+			smallestOutput = []rune(dkm)
+		}
+	}
+	return string(smallestOutput)
+}
+
+func generateDirectionalValuesForCoord(c day21.Coord, input rune) string {
 	dk := day21.NewDirectionalKeypad()
 	dk.SetCurrentPosition(c.X, c.Y)
 	dkArray := dk.CalculateMovements(input)
@@ -194,34 +227,6 @@ func complexMachine2(c day21.Coord, input rune) string {
 		}
 		if len(output) < len(smallestOutput) || len(smallestOutput) == 0 {
 			smallestOutput = output
-		}
-	}
-	return string(smallestOutput)
-}
-
-func complexMachine3(c day21.Coord, input rune) string {
-	dk := day21.NewDirectionalKeypad()
-	dk.SetCurrentPosition(c.X, c.Y)
-	dkArray := dk.CalculateMovements(input)
-	if len(dkArray) == 0 {
-		return "A"
-	}
-	smallestOutput := []rune{}
-	smallest2xDeepOutput := []rune{}
-
-	for _, dkm := range dkArray {
-		output := []rune{}
-		dk1 := day21.NewDirectionalKeypad()
-		for _, dkChar := range dkm {
-			path := complexMachine2(dk1.GetCurrentPosition(), dkChar)
-			for _, char := range path {
-				output = append(output, char)
-			}
-			dk1.Move(path)
-		}
-		if len(output) < len(smallest2xDeepOutput) || len(smallest2xDeepOutput) == 0 {
-			smallest2xDeepOutput = output
-			smallestOutput = []rune(dkm)
 		}
 	}
 	return string(smallestOutput)

@@ -164,23 +164,39 @@ func TestComplexMachine1BaseCases(t *testing.T) {
 		{input: 'A', possibleOutputs: []string{""}},
 	}
 	outputsSeen := make(map[rune]map[string]int)
-	for i := range 200 {
-		t.Logf("Test %d\n", i)
-		for _, tc := range testCases {
-			tc := tc // capture range variable
-			t.Run(string(tc.input), func(t *testing.T) {
-				c := day21.Coord{X: 2, Y: 3} // Default starting position
-				output := complexMachine1(c, tc.input)
-				if !slices.Contains(tc.possibleOutputs, output) {
-					t.Errorf("Expected output to contain %s, but got %s", tc.possibleOutputs, output)
+	optimalValueMap := generateOptimalDirectionalValues()
+
+	for _, tc := range testCases {
+		tc := tc // capture range variable
+
+		// Define the test function
+		test := func(t *testing.T) {
+			c := day21.Coord{X: 2, Y: 3} // Default starting position
+			output := complexMachine1(optimalValueMap, c, tc.input)
+			if !slices.Contains(tc.possibleOutputs, output) {
+				t.Errorf("Expected output to contain %s, but got %s", tc.possibleOutputs, output)
+			}
+			if _, ok := outputsSeen[tc.input]; !ok {
+				outputsSeen[tc.input] = make(map[string]int)
+			}
+			outputsSeen[tc.input][output]++
+		}
+		if len(tc.possibleOutputs) > 1 {
+			i := 0
+			for len(outputsSeen[tc.input]) < len(tc.possibleOutputs) {
+				testName := fmt.Sprintf("Input: %s, Iteration: %d", string(tc.input), i)
+				t.Run(testName, test)
+				i++
+				if i > 500 {
+					t.Error("Test did not complete in a reasonable amount of time")
 				}
-				if _, ok := outputsSeen[tc.input]; !ok {
-					outputsSeen[tc.input] = make(map[string]int)
-				}
-				outputsSeen[tc.input][output]++
-			})
+			}
+		} else {
+			testName := fmt.Sprintf("Input: %s", string(tc.input))
+			t.Run(testName, test)
 		}
 	}
+
 	// Check that the count of outputs seen is the same as the count of expected outputs for each test case
 	for _, tc := range testCases {
 		tc := tc // capture range variable
@@ -216,7 +232,7 @@ func TestComplexMachine2BaseCase(t *testing.T) {
 		for _, tc := range testCases {
 			tc := tc // capture range variable
 			t.Run(fmt.Sprintf("Coord: (%d, %d), Input: %c", tc.coord.X, tc.coord.Y, tc.input), func(t *testing.T) {
-				output := complexMachine2(tc.coord, tc.input)
+				output := generateDirectionalValuesForCoord(tc.coord, tc.input)
 				if !slices.Contains(tc.possibleOutputs, output) {
 					t.Errorf("Expected output to contain %s, but got %s", tc.possibleOutputs, output)
 				}
@@ -262,7 +278,7 @@ func TestComplexMachine2SecondLocation(t *testing.T) {
 		for _, tc := range testCases {
 			tc := tc // capture range variable
 			t.Run(fmt.Sprintf("Coord: (%d, %d), Input: %c", tc.coord.X, tc.coord.Y, tc.input), func(t *testing.T) {
-				output := complexMachine2(tc.coord, tc.input)
+				output := generateDirectionalValuesForCoord(tc.coord, tc.input)
 				if !slices.Contains(tc.possibleOutputs, output) {
 					t.Errorf("Expected output to contain %s, but got %s", tc.possibleOutputs, output)
 				}
@@ -307,7 +323,7 @@ func TestComplexMachine3BaseCase(t *testing.T) {
 		for _, tc := range testCases {
 			tc := tc // capture range variable
 			t.Run(fmt.Sprintf("Coord: (%d, %d), Input: %c", tc.coord.X, tc.coord.Y, tc.input), func(t *testing.T) {
-				output := complexMachine3(tc.coord, tc.input)
+				output := generateOptimalDirectionalValuesForCoord(tc.coord, tc.input)
 				if !slices.Contains(tc.possibleOutputs, output) {
 					t.Errorf("Expected output to contain %s, but got %s", tc.possibleOutputs, output)
 				}
@@ -353,7 +369,7 @@ func TestComplexMachine3SecondLocation(t *testing.T) {
 		for _, tc := range testCases {
 			tc := tc // capture range variable
 			t.Run(fmt.Sprintf("Coord: (%d, %d), Input: %c", tc.coord.X, tc.coord.Y, tc.input), func(t *testing.T) {
-				output := complexMachine3(tc.coord, tc.input)
+				output := generateOptimalDirectionalValuesForCoord(tc.coord, tc.input)
 				if !slices.Contains(tc.possibleOutputs, output) {
 					t.Errorf("Expected output to contain %s, but got %s", tc.possibleOutputs, output)
 				}
