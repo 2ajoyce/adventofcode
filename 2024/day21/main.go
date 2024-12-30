@@ -106,10 +106,6 @@ func solve(codes []string) ([]string, error) {
 	depth := 2
 	optimizedValues := generateOptimalNumericValues(depth)
 
-	for k, v := range optimizedValues[day21.Coord{X: 2, Y: 3}] {
-		fmt.Printf("Key: %c, Value: %s\n", k, v[0])
-	}
-
 	totalCost := 0
 	for code := range codes {
 		input := ""
@@ -119,7 +115,6 @@ func solve(codes []string) ([]string, error) {
 			input += optimizedValues[currentLocation][c][0]
 			currentLocation = nk.GetPosition(c)
 		}
-		fmt.Printf("Code: %s, Input: %s\n", codes[code], input)
 		cost, err := calculateCost(codes[code], len(input))
 		if err != nil {
 			return nil, fmt.Errorf("error calculating cost: %v", err)
@@ -156,27 +151,20 @@ func generateOptimalNumericValues(depth int) optimalValueMap {
 }
 
 func recursiveFunc(optimalValues optimalValueMap, dk1 *day21.DirectionalKeypad, priorChar rune, depth int) string {
-	// fmt.Printf("    Depth: %d, Coord: %v, Prior Char: %c\n", depth, dk1.GetCurrentPosition(), priorChar)
 	output := ""
 	originalCoord := dk1.GetCurrentPosition()
 	if _, ok := optimalValues[originalCoord][priorChar][depth]; !ok {
-		// fmt.Printf("        Depth: %d, Did not find optimal value for %v, %c, %d\n", depth, originalCoord, priorChar, depth)
 		zeroString := optimalValues[originalCoord][priorChar][0]
 		dk2 := day21.NewDirectionalKeypad()
-		// fmt.Printf("        Depth: %d, Zero String: %s\n", depth, zeroString)
 		for _, dkChar := range zeroString {
-			// currentCoord := dk1.GetCurrentPosition()
-			// fmt.Printf("            Depth: %d, Current Coord: %v, Char: %c\n", depth, currentCoord, dkChar)
 			m := recursiveFunc(optimalValues, dk2, dkChar, depth-1)
 			dk2.Move(m)
 			output += m
 		}
-		// fmt.Printf("        Depth: %d, Saving optimal value for %v, %c, %d: %s\n", depth, originalCoord, priorChar, depth, output)
 		optimalValues[originalCoord][priorChar][depth] = output
 	} else {
 		output += optimalValues[originalCoord][priorChar][depth]
 	}
-	// fmt.Printf("        Depth: %d, Output: %s\n\n", depth, output)
 	return output
 }
 
@@ -190,15 +178,11 @@ func generateOptimalNumericValuesForCoord(optimalValues optimalValueMap, c day21
 
 	smallestOutput := ""
 	for _, nkm := range nkmArray {
-		// fmt.Printf("NKM: %s\n", nkm)
 		output := ""
 		dk1 := day21.NewDirectionalKeypad()
 		for _, nkmChar := range nkm {
-			// fmt.Printf("  NKM Char: %c\n", nkmChar)
 			output += recursiveFunc(optimalValues, dk1, nkmChar, maxDepth-1)
-			// fmt.Printf("  Moving: %s\n", optimalValues[dk1.GetCurrentPosition()][nkmChar][0])
 			dk1.Move(optimalValues[dk1.GetCurrentPosition()][nkmChar][0])
-			// fmt.Printf("  Top Output: %s\n", output)
 		}
 		if len(output) < len(smallestOutput) || smallestOutput == "" {
 			smallestOutput = output
