@@ -89,7 +89,8 @@ func parseLines(lines []string) ([]string, error) {
 	return codes, nil
 }
 
-type optimalValueMap map[day21.Coord]map[rune]string
+// Map of starting coordinate, rune input, depth, and optimal output
+type optimalValueMap map[day21.Coord]map[rune]map[int]string
 
 func solve(codes []string) ([]string, error) {
 	DEBUG := os.Getenv("DEBUG") == "true"
@@ -106,7 +107,7 @@ func solve(codes []string) ([]string, error) {
 	optimizedValues := generateOptimalNumericValues(depth)
 
 	for k, v := range optimizedValues[day21.Coord{X: 2, Y: 3}] {
-		fmt.Printf("Key: %c, Value: %s\n", k, v)
+		fmt.Printf("Key: %c, Value: %s\n", k, v[depth])
 	}
 
 	totalCost := 0
@@ -115,7 +116,7 @@ func solve(codes []string) ([]string, error) {
 		nk := day21.NewNumericKeypad()
 		currentLocation := nk.GetCurrentPosition()
 		for _, c := range codes[code] {
-			input += optimizedValues[currentLocation][c]
+			input += optimizedValues[currentLocation][c][depth]
 			currentLocation = nk.GetPosition(c)
 		}
 		fmt.Printf("Code: %s, Input: %s\n", codes[code], input)
@@ -136,41 +137,47 @@ func generateOptimalNumericValues(depth int) optimalValueMap {
 
 	bar := progressbar.Default(int64(3 * 4 * 11))
 	// Create a map of the shortest possible outputs for each integer 0-9
-	optimizedValues := make(map[day21.Coord]map[rune]string)
+	optimizedValues := make(map[day21.Coord]map[rune]map[int]string)
 	for x := 0; x < 3; x++ {
 		for y := 0; y < 4; y++ {
 			c := day21.Coord{X: x, Y: y}
-			optimizedValues[c] = make(map[rune]string)
+			optimizedValues[c] = make(map[rune]map[int]string)
 			for i := 0; i < 10; i++ {
-				optimizedValues[c][rune(i+48)] = generateOptimalNumericValuesForCoord(optimalDirectionalValues, c, rune(i+48), depth)
+				optimizedValues[c][rune(i+48)] = make(map[int]string)
+				optimizedValues[c][rune(i+48)][1] = generateOptimalNumericValuesForCoord(optimalDirectionalValues, c, rune(i+48), depth)
 			}
 			// Find the optimal values for A also
-			optimizedValues[c]['A'] = generateOptimalNumericValuesForCoord(optimalDirectionalValues, c, 'A', depth)
+			optimizedValues[c]['A'] = make(map[int]string)
+			optimizedValues[c]['A'][1] = generateOptimalNumericValuesForCoord(optimalDirectionalValues, c, 'A', depth)
 			bar.Add(1)
 		}
 	}
 	return optimizedValues
 }
 
-// type optimalValueMap map[day21.Coord]map[rune]string
-
-func recursiveFunc(optimalValues optimalValueMap, dk1 *day21.DirectionalKeypad, priorChar rune, depth int) string {
+func recursiveFunc(optimalValues optimalValueMap, dk1 *day21.DirectionalKeypad, priorChar rune, depth int, maxDepth int) string {
 	output := ""
 	currentCoord := dk1.GetCurrentPosition()
-	dk1Movement := optimalValues[currentCoord][priorChar]
-	if depth == 0 {
+	dk1Movement := optimalValues[currentCoord][priorChar][1]
+	if depth > maxDepth {
 		dk1.Move(dk1Movement)
 		return dk1Movement
 	}
 	dk2 := day21.NewDirectionalKeypad()
 	for _, dk1Char := range dk1Movement {
-		output += recursiveFunc(optimalValues, dk2, dk1Char, depth-1)
+		newCoord := dk2.GetCurrentPosition()
+		if _, ok := optimalValues[newCoord][dk1Char][depth+1]; !ok {
+			optimalValues[newCoord][dk1Char][depth+1] = recursiveFunc(optimalValues, dk2, dk1Char, depth+1, maxDepth)
+		} else {
+			dk2.Move(optimalValues[newCoord][dk1Char][depth+1])
+		}
+		output += optimalValues[newCoord][dk1Char][depth+1]
 	}
 	dk1.Move(dk1Movement)
 	return output
 }
 
-func generateOptimalNumericValuesForCoord(optimalValues optimalValueMap, c day21.Coord, input rune, depth int) string {
+func generateOptimalNumericValuesForCoord(optimalValues optimalValueMap, c day21.Coord, input rune, maxDepth int) string {
 	nk := day21.NewNumericKeypad()
 	nk.SetCurrentPosition(c.X, c.Y)
 	nkmArray := nk.CalculateMovements(input)
@@ -183,7 +190,8 @@ func generateOptimalNumericValuesForCoord(optimalValues optimalValueMap, c day21
 		output := ""
 		dk1 := day21.NewDirectionalKeypad()
 		for _, nkmChar := range nkm {
-			output += recursiveFunc(optimalValues, dk1, nkmChar, depth)
+			depth := 1
+			output += recursiveFunc(optimalValues, dk1, nkmChar, depth, maxDepth)
 		}
 		if len(output) < len(smallestOutput) || smallestOutput == "" {
 			smallestOutput = output
@@ -199,9 +207,10 @@ func generateOptimalDirectionalValues() optimalValueMap {
 	for x := 0; x < 3; x++ {
 		for y := 0; y < 2; y++ {
 			c := day21.Coord{X: x, Y: y}
-			optimalDirectionalValues[c] = make(map[rune]string)
+			optimalDirectionalValues[c] = make(map[rune]map[int]string)
 			for _, r := range possibleRunes {
-				optimalDirectionalValues[c][r] = generateOptimalDirectionalValuesForCoord(day21.Coord{X: x, Y: y}, r)
+				optimalDirectionalValues[c][r] = make(map[int]string)
+				optimalDirectionalValues[c][r][1] = generateOptimalDirectionalValuesForCoord(day21.Coord{X: x, Y: y}, r)
 			}
 		}
 	}
