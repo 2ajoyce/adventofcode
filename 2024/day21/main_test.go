@@ -145,7 +145,21 @@ func TestCalculateCost(t *testing.T) {
 	}
 }
 
-func TestComplexMachine1BaseCases(t *testing.T) {
+func TestGenerateOptimalNumericValuesForCoordSimple(t *testing.T) {
+	depth := 1
+	input := '9'
+	expectedOutput := "v<<A>>^AAAvA^A"
+	optimalValueMap := generateOptimalDirectionalValues() // This is non-deterministic, which is why we run it multiple times
+
+	c := day21.Coord{X: 2, Y: 3} // Default starting position
+	output := generateOptimalNumericValuesForCoord(optimalValueMap, c, input, depth)
+	if output != expectedOutput {
+		t.Errorf("Expected output to be %s, but got %s", expectedOutput, output)
+	}
+}
+
+func TestGenerateOptimalNumericValuesForCoord(t *testing.T) {
+	depth := 1
 	// This test case is slow, but it fully captures the inputs returning multiple outputs when run from the initial position
 	testCases := []struct {
 		input           rune
@@ -174,7 +188,7 @@ func TestComplexMachine1BaseCases(t *testing.T) {
 			testName := fmt.Sprintf("Input: %s, Iteration: %d", string(tc.input), i)
 			t.Run(testName, func(t *testing.T) {
 				c := day21.Coord{X: 2, Y: 3} // Default starting position
-				output := generateOptimalNumericValuesForCoord(optimalValueMap, c, tc.input)
+				output := generateOptimalNumericValuesForCoord(optimalValueMap, c, tc.input, depth)
 				if !slices.Contains(tc.possibleOutputs, output) {
 					t.Errorf("Expected output to contain %s, but got %s", tc.possibleOutputs, output)
 				}
@@ -202,7 +216,7 @@ func TestComplexMachine1BaseCases(t *testing.T) {
 	}
 }
 
-func TestComplexMachine2BaseCase(t *testing.T) {
+func TestGenerateDirectionalValuesForCoordBaseCase(t *testing.T) {
 	testCases := []struct {
 		coord           day21.Coord
 		input           rune
@@ -248,7 +262,7 @@ func TestComplexMachine2BaseCase(t *testing.T) {
 	}
 }
 
-func TestComplexMachine2SecondLocation(t *testing.T) {
+func TestGenerateDirectionalValuesForCoordSecondLocation(t *testing.T) {
 	testCases := []struct {
 		coord           day21.Coord
 		input           rune
@@ -293,7 +307,7 @@ func TestComplexMachine2SecondLocation(t *testing.T) {
 
 	}
 }
-func TestComplexMachine3BaseCase(t *testing.T) {
+func TestGenerateOptimalDirectionalValuesForCoordBaseCase(t *testing.T) {
 	testCases := []struct {
 		coord           day21.Coord
 		input           rune
@@ -339,7 +353,7 @@ func TestComplexMachine3BaseCase(t *testing.T) {
 	}
 }
 
-func TestComplexMachine3SecondLocation(t *testing.T) {
+func TestGenerateOptimalDirectionalValuesForCoordSecondLocation(t *testing.T) {
 	testCases := []struct {
 		coord           day21.Coord
 		input           rune
