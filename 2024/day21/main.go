@@ -100,21 +100,8 @@ func solve(codes []string) ([]string, error) {
 		}
 	}
 
-	optimalDirectionalValues := generateOptimalDirectionalValues()
+	optimizedValues := generateOptimalNumericValues()
 
-	// Create a map of the shortest possible outputs for each integer 0-9
-	optimizedValues := make(map[day21.Coord]map[rune]string)
-	for x := 0; x < 3; x++ {
-		for y := 0; y < 4; y++ {
-			c := day21.Coord{X: x, Y: y}
-			optimizedValues[c] = make(map[rune]string)
-			for i := 0; i < 10; i++ {
-				optimizedValues[c][rune(i+48)] = complexMachine1(optimalDirectionalValues, c, rune(i+48))
-			}
-			// Find the optimal values for A also
-			optimizedValues[c]['A'] = complexMachine1(optimalDirectionalValues, c, 'A')
-		}
-	}
 	for k, v := range optimizedValues[day21.Coord{X: 2, Y: 3}] {
 		fmt.Printf("Key: %c, Value: %s\n", k, v)
 	}
@@ -140,7 +127,26 @@ func solve(codes []string) ([]string, error) {
 	return []string{totalCostStr}, nil
 }
 
-func complexMachine1(optimalValues optimalValueMap, c day21.Coord, input rune) string {
+func generateOptimalNumericValues() optimalValueMap {
+	optimalDirectionalValues := generateOptimalDirectionalValues()
+
+	// Create a map of the shortest possible outputs for each integer 0-9
+	optimizedValues := make(map[day21.Coord]map[rune]string)
+	for x := 0; x < 3; x++ {
+		for y := 0; y < 4; y++ {
+			c := day21.Coord{X: x, Y: y}
+			optimizedValues[c] = make(map[rune]string)
+			for i := 0; i < 10; i++ {
+				optimizedValues[c][rune(i+48)] = generateOptimalNumericValuesForCoord(optimalDirectionalValues, c, rune(i+48))
+			}
+			// Find the optimal values for A also
+			optimizedValues[c]['A'] = generateOptimalNumericValuesForCoord(optimalDirectionalValues, c, 'A')
+		}
+	}
+	return optimizedValues
+}
+
+func generateOptimalNumericValuesForCoord(optimalValues optimalValueMap, c day21.Coord, input rune) string {
 	nk := day21.NewNumericKeypad()
 	nk.SetCurrentPosition(c.X, c.Y)
 	nkmArray := nk.CalculateMovements(input)
