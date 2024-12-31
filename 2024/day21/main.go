@@ -6,8 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-
-	"github.com/schollz/progressbar/v3"
+	"time"
 )
 
 func main() {
@@ -103,7 +102,7 @@ func solve(codes []string) ([]string, error) {
 		}
 	}
 
-	depth := 2
+	depth := 1
 	optimizedValues := generateOptimalNumericValues(depth)
 
 	totalCost := 0
@@ -128,13 +127,17 @@ func solve(codes []string) ([]string, error) {
 }
 
 func generateOptimalNumericValues(depth int) optimalValueMap {
-	optimalDirectionalValues := generateOptimalDirectionalValues()
+	fmt.Println("Generating optimal directional values...")
+	optimalDirectionalValues := generateOptimalDirectionalValues(depth)
+	fmt.Println("Generated optimal directional values")
 
-	bar := progressbar.Default(int64(3 * 4 * 11))
 	// Create a map of the shortest possible outputs for each integer 0-9
 	optimizedValues := make(map[day21.Coord]map[rune]map[int]string)
+	// Start a timer
+	start := time.Now()
 	for x := 0; x < 3; x++ {
 		for y := 0; y < 4; y++ {
+			fmt.Printf("Generating optimal numeric values for %d, %d : %.2fs\n", x, y, time.Since(start).Seconds())
 			c := day21.Coord{X: x, Y: y}
 			optimizedValues[c] = make(map[rune]map[int]string)
 			for i := 0; i < 10; i++ {
@@ -144,7 +147,6 @@ func generateOptimalNumericValues(depth int) optimalValueMap {
 			// Find the optimal values for A also
 			optimizedValues[c]['A'] = make(map[int]string)
 			optimizedValues[c]['A'][0] = generateOptimalNumericValuesForCoord(optimalDirectionalValues, c, 'A', depth)
-			bar.Add(1)
 		}
 	}
 	return optimizedValues
@@ -181,18 +183,17 @@ func generateOptimalNumericValuesForCoord(optimalValues optimalValueMap, c day21
 		output := ""
 		dk1 := day21.NewDirectionalKeypad()
 		for _, nkmChar := range nkm {
-			output += recursiveFunc(optimalValues, dk1, nkmChar, maxDepth-1)
+			output += recursiveFunc(optimalValues, dk1, nkmChar, maxDepth)
 			dk1.Move(optimalValues[dk1.GetCurrentPosition()][nkmChar][0])
 		}
 		if len(output) < len(smallestOutput) || smallestOutput == "" {
 			smallestOutput = output
 		}
 	}
-
 	return smallestOutput
 }
 
-func generateOptimalDirectionalValues() optimalValueMap {
+func generateOptimalDirectionalValues(depth int) optimalValueMap {
 	optimalDirectionalValues := make(optimalValueMap)
 	possibleRunes := []rune{'<', '>', '^', 'v', 'A'}
 	for x := 0; x < 3; x++ {
@@ -205,6 +206,68 @@ func generateOptimalDirectionalValues() optimalValueMap {
 			}
 		}
 	}
+	fmt.Println("Generated optimal directional values for depth 0")
+
+	a1 := make(map[day21.Coord]map[rune]string)
+	a2 := make(map[day21.Coord]map[rune]string)
+	for x := 0; x < 3; x++ {
+		for y := 0; y < 2; y++ {
+			c := day21.Coord{X: x, Y: y}
+			a1[c] = make(map[rune]string)
+			a2[c] = make(map[rune]string)
+			for _, r := range possibleRunes {
+				a2[c][r] = optimalDirectionalValues[c][r][0]
+			}
+		}
+	}
+
+	for d := 1; d <= depth; d++ {
+		fmt.Printf("Generating optimal directional values for depth %d\n", d)
+		for x := 0; x < 3; x++ {
+			for y := 0; y < 2; y++ {
+				if x == 0 && y == 0 {
+					continue
+				}
+				c := day21.Coord{X: x, Y: y}
+				for _, r := range possibleRunes {
+					movement := a2[c][r]
+					compoundMovement := ""
+					dk := day21.NewDirectionalKeypad()
+					currentLocation := dk.GetCurrentPosition()
+					for i, move := range movement {
+						if i > 0 {
+							currentLocation = dk.GetPosition(rune(movement[i-1]))
+						}
+						subMove := a2[currentLocation][move]
+						compoundMovement += subMove
+					}
+					a1[c][r] = compoundMovement
+				}
+			}
+		}
+		// Deep copy a1 to a2
+		for k, v := range a1 {
+			for k2, v2 := range v {
+				a2[k][k2] = v2
+			}
+		}
+	}
+	// Copy the values from a1 to optimalDirectionalValues
+	for k, v := range a1 {
+		for k2, v2 := range v {
+			optimalDirectionalValues[k][k2][depth] = v2
+		}
+	}
+	// For double checking, print out the optimal values
+	for x := 0; x < 3; x++ {
+		for y := 0; y < 2; y++ {
+			c := day21.Coord{X: x, Y: y}
+			for _, r := range possibleRunes {
+				fmt.Printf("Coord: %v, Rune: %c, Optimal Value: %s\n", c, r, a1[c][r])
+			}
+		}
+	}
+
 	return optimalDirectionalValues
 }
 
