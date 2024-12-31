@@ -102,7 +102,7 @@ func solve(codes []string) ([]string, error) {
 		}
 	}
 
-	depth := 1
+	depth := 24
 	optimizedValues := generateOptimalNumericValues(depth)
 
 	totalCost := 0
@@ -191,48 +191,50 @@ func generateOptimalDirectionalValues(depth int) optimalValueMap {
 	fmt.Println("Generated optimal directional values for depth 0")
 
 	a1 := make(map[day21.Coord]map[rune]string)
-	a2 := make(map[day21.Coord]map[rune]string)
 	for x := 0; x < 3; x++ {
 		for y := 0; y < 2; y++ {
 			c := day21.Coord{X: x, Y: y}
 			a1[c] = make(map[rune]string)
-			a2[c] = make(map[rune]string)
 			for _, r := range possibleRunes {
-				a2[c][r] = optimalDirectionalValues[c][r][0]
+				a1[c][r] = optimalDirectionalValues[c][r][0]
 			}
 		}
 	}
 
+	trie := aocUtils.NewTrie()
+	t := time.Now()
 	for d := 1; d <= depth; d++ {
-		fmt.Printf("Generating optimal directional values for depth %d\n", d)
+		fmt.Printf("Generating optimal directional values for depth %d: %.2fs\n", d, time.Since(t).Seconds())
 		for x := 0; x < 3; x++ {
 			for y := 0; y < 2; y++ {
 				if x == 0 && y == 0 {
 					continue
 				}
 				c := day21.Coord{X: x, Y: y}
+				t2 := time.Now()
 				for _, r := range possibleRunes {
-					movement := a2[c][r]
-					compoundMovement := ""
-					dk := day21.NewDirectionalKeypad()
-					currentLocation := dk.GetCurrentPosition()
-					for i, move := range movement {
-						if i > 0 {
-							currentLocation = dk.GetPosition(rune(movement[i-1]))
+					movement := a1[c][r]
+					sub := trie.Substitute(movement, func(sub string) string {
+						keyboard := day21.NewDirectionalKeypad()
+						currentLocation := keyboard.GetCurrentPosition()
+						replacement := ""
+						for i, move := range sub {
+							if i > 0 {
+								currentLocation = keyboard.GetPosition(rune(movement[i-1]))
+							}
+							subMove := optimalDirectionalValues[currentLocation][move][0]
+							replacement += subMove
 						}
-						subMove := optimalDirectionalValues[currentLocation][move][0]
-						compoundMovement += subMove
-					}
-					a1[c][r] = compoundMovement
+						return replacement
+					})
+
+					fmt.Printf("\rGenerating optimal directional values for %d, %d, %s (%d): %.2fs", x, y, string(r), len(movement), time.Since(t2).Seconds())
+					trie.Insert(movement, sub)
+					a1[c][r] = sub
 				}
 			}
 		}
-		// Deep copy a1 to a2
-		for k, v := range a1 {
-			for k2, v2 := range v {
-				a2[k][k2] = v2
-			}
-		}
+		fmt.Printf("\r")
 	}
 	// Copy the values from a1 to optimalDirectionalValues
 	for k, v := range a1 {
