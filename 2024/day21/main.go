@@ -152,24 +152,6 @@ func generateOptimalNumericValues(depth int) optimalValueMap {
 	return optimizedValues
 }
 
-func recursiveFunc(optimalValues optimalValueMap, dk1 *day21.DirectionalKeypad, priorChar rune, depth int) string {
-	output := ""
-	originalCoord := dk1.GetCurrentPosition()
-	if _, ok := optimalValues[originalCoord][priorChar][depth]; !ok {
-		zeroString := optimalValues[originalCoord][priorChar][0]
-		dk2 := day21.NewDirectionalKeypad()
-		for _, dkChar := range zeroString {
-			m := recursiveFunc(optimalValues, dk2, dkChar, depth-1)
-			dk2.Move(m)
-			output += m
-		}
-		optimalValues[originalCoord][priorChar][depth] = output
-	} else {
-		output += optimalValues[originalCoord][priorChar][depth]
-	}
-	return output
-}
-
 func generateOptimalNumericValuesForCoord(optimalValues optimalValueMap, c day21.Coord, input rune, maxDepth int) string {
 	nk := day21.NewNumericKeypad()
 	nk.SetCurrentPosition(c.X, c.Y)
@@ -183,7 +165,7 @@ func generateOptimalNumericValuesForCoord(optimalValues optimalValueMap, c day21
 		output := ""
 		dk1 := day21.NewDirectionalKeypad()
 		for _, nkmChar := range nkm {
-			output += recursiveFunc(optimalValues, dk1, nkmChar, maxDepth)
+			output += optimalValues[dk1.GetCurrentPosition()][nkmChar][maxDepth]
 			dk1.Move(optimalValues[dk1.GetCurrentPosition()][nkmChar][0])
 		}
 		if len(output) < len(smallestOutput) || smallestOutput == "" {
@@ -238,7 +220,7 @@ func generateOptimalDirectionalValues(depth int) optimalValueMap {
 						if i > 0 {
 							currentLocation = dk.GetPosition(rune(movement[i-1]))
 						}
-						subMove := a2[currentLocation][move]
+						subMove := optimalDirectionalValues[currentLocation][move][0]
 						compoundMovement += subMove
 					}
 					a1[c][r] = compoundMovement
@@ -256,15 +238,6 @@ func generateOptimalDirectionalValues(depth int) optimalValueMap {
 	for k, v := range a1 {
 		for k2, v2 := range v {
 			optimalDirectionalValues[k][k2][depth] = v2
-		}
-	}
-	// For double checking, print out the optimal values
-	for x := 0; x < 3; x++ {
-		for y := 0; y < 2; y++ {
-			c := day21.Coord{X: x, Y: y}
-			for _, r := range possibleRunes {
-				fmt.Printf("Coord: %v, Rune: %c, Optimal Value: %s\n", c, r, a1[c][r])
-			}
 		}
 	}
 
