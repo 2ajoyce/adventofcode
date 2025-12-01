@@ -1,0 +1,20 @@
+# justfile
+# Recipes:
+# - init <N>    : bootstraps a day using scripts/start-day.py
+# - run <N>    : runs the day with `go run <N>/main.go`
+
+init day:
+    python scripts/start-day.py {{day}}
+
+run day:
+    cd {{day}} && go run main.go
+
+# Normal test, only outputs failures
+test day:
+    # Change directory into the day's folder and run tests
+    cd {{day}} && go test ./...
+
+# Verbose test, outputs success & failure
+vtest day:
+    # Change directory into the day's folder and run tests
+    cd {{day}} && go test -v ./...

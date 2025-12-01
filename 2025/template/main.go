@@ -1,7 +1,60 @@
 package main
 
-import "fmt"
+import (
+	"bufio"
+	"fmt"
+	"os"
+)
 
 func main() {
-	fmt.Println("hello world")
+	// First Problem
+	input := make(chan string)
+	go ReadInput("input1.txt", input)
+	result, err := Solve1(input)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(result)
+
+	// Second Problem
+	input = make(chan string)
+	go ReadInput("input2.txt", input)
+	result, err = Solve2(input)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(result)
+}
+
+// ReadInput reads the input from the filepath and sends each line to the provided channel.
+func ReadInput(filepath string, c chan string) {
+	f, err := os.Open(filepath)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	r := bufio.NewReader(f)
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		line := scanner.Text()
+		c <- line
+	}
+	close(c)
+}
+
+func Solve1(input chan string) (string, error) {
+	total := 0
+	for line := range input {
+		total += len(string(line)) // Increment the total by the number of characters in the line
+	}
+	return fmt.Sprintf("%d", total), nil
+}
+
+func Solve2(input chan string) (string, error) {
+	total := 0
+	for line := range input {
+		total += len(string(line)) // Increment the total by the number of characters in the line
+	}
+	return fmt.Sprintf("%d", total), nil
 }

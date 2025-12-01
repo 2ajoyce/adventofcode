@@ -58,6 +58,31 @@ def main():
         copied += 1
         print(f"Copied: {dest}")
 
+        # If we copied a go.mod, update its module path so the last
+        # path segment matches the target day directory (e.g. replace
+        # trailing 'template' with '1'). This keeps module names
+        # consistent per-day.
+        if dest.name == "go.mod":
+            try:
+                text = dest.read_text(encoding="utf-8")
+            except Exception:
+                # If we can't read the file for some reason, continue.
+                print(f"Warning: couldn't read {dest} to patch module line.")
+            else:
+                lines = text.splitlines()
+                for i, line in enumerate(lines):
+                    if line.strip().startswith("module "):
+                        mod = line.strip()[len("module ") :].strip()
+                        parts = mod.split("/")
+                        if parts:
+                            parts[-1] = day
+                            newmod = "/".join(parts)
+                            lines[i] = "module " + newmod
+                        break
+                # write back; ensure newline at EOF
+                dest.write_text("\n".join(lines) + "\n", encoding="utf-8")
+                print(f"Patched module path in: {dest}")
+
     print(f"Done. Copied {copied} file(s), skipped {skipped} existing file(s).")
 
 
