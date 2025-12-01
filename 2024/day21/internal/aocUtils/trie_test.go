@@ -7,7 +7,7 @@ import (
 
 func TestTrieSubstitution(t *testing.T) {
     // Initialize the trie
-    trie := NewTrie() // Assuming NewTrie() is the constructor for the trie
+    trie := NewTrie()
 
     // Add rules to the trie
     fmt.Println("Running test")
@@ -46,7 +46,7 @@ func TestTrieSubstitution(t *testing.T) {
 
 func TestTrieSubstitutionDouble(t *testing.T) {
     // Initialize the trie
-    trie := NewTrie() // Assuming NewTrie() is the constructor for the trie
+    trie := NewTrie()
 
     // Add rules to the trie
     fmt.Println("Running test")

@@ -77,14 +77,28 @@ func (d *DirectionalKeypad) CalculateMovements(input rune) []string {
 	d.currentX = originalX
 	d.currentY = originalY
 
+	if len(output) == 0 {
+		return []string{"A"}
+	}
+
 	permutations := permutateSubstring(output)
 	validPermutations := []string{}
+	shortestPermutationLength := len(permutations[0])
 	for i := range permutations {
 		if d.validateMove(permutations[i]) {
 			validPermutations = append(validPermutations, permutations[i])
 		}
+		if len(permutations[i]) < shortestPermutationLength {
+			shortestPermutationLength = len(permutations[i])
+		}
 	}
-	return validPermutations
+	shortestPermutations := []string{}
+	for i := range validPermutations {
+		if len(validPermutations[i]) == shortestPermutationLength {
+			shortestPermutations = append(shortestPermutations, validPermutations[i])
+		}
+	}
+	return shortestPermutations
 }
 
 // calculateMovement calculates the movements to move from the current position to the target position

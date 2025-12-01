@@ -62,6 +62,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestMainExample(t *testing.T) {
+	os.Setenv("DEPTH", "2")
 	input := []string{
 		"029A",
 		"980A",
@@ -75,9 +76,11 @@ func TestMainExample(t *testing.T) {
 		"126384",
 	}
 	validateOutput(t, expectedOutput)
+	os.Unsetenv("DEPTH")
 }
 
 func TestMainExampleSmall(t *testing.T) {
+	os.Setenv("DEPTH", "2")
 	input := []string{
 		"379A",
 	}
@@ -87,9 +90,11 @@ func TestMainExampleSmall(t *testing.T) {
 		"24256",
 	}
 	validateOutput(t, expectedOutput)
+	os.Unsetenv("DEPTH")
 }
 
 func TestMainBaseCases(t *testing.T) {
+	os.Setenv("DEPTH", "2")
 	testCases := []struct {
 		input          string
 		expectedOutput string
@@ -113,6 +118,7 @@ func TestMainBaseCases(t *testing.T) {
 			validateOutput(t, []string{tc.expectedOutput})
 		})
 	}
+	os.Unsetenv("DEPTH")
 }
 
 func TestCalculateCost(t *testing.T) {
@@ -216,7 +222,57 @@ func TestGenerateOptimalNumericValuesForCoord(t *testing.T) {
 	}
 }
 
+func TestGenerateOptimalDirectionalValuesBaseCase(t *testing.T) {
+	depth := 4
+	symbols := []rune{'<', '>', '^', 'v', 'A'}
+	// Keypad layout:
+	// _ ^ A
+	// < v >
+
+	aCoord := day21.Coord{X: 2, Y: 0} // This test will only validate movements from A to symbols
+
+	output := generateOptimalDirectionalValues(depth)
+	for _, o := range output[aCoord] {
+		fmt.Printf("Output: %v\n", o)
+	}
+	// Starting with depth 1, insert the output into the first keypad
+	for _, symbol := range symbols {
+		for d := 1; d <= depth; d++ {
+			subOutput := output[aCoord][symbol][d]
+			fmt.Printf("Depth %d, Symbol %s: SubOutput: %s\n", d, string(symbol), subOutput)
+			dk := day21.NewDirectionalKeypad()
+			for d2 := d; d2 > 0; d2-- {
+				subResult := ""
+				for _, c := range subOutput {
+					if c == 'A' {
+						p := dk.GetCurrentPosition()
+						for _, s := range symbols {
+							if p == dk.GetPosition(s) {
+								subResult += string(s)
+								break
+							}
+						}
+					}
+					f := dk.GetCurrentPosition()
+					dk.Move(string(c)) // This doesn't move to the rune. It moves BY the rune.
+					t := dk.GetCurrentPosition()
+					fmt.Printf("    Depth %d, Symbol %s: From %v to %v: %c\n", d, string(symbol), f, t, c)
+					// fmt.Printf("Depth %d, Symbol %s: SubResult: %s\n", d, string(symbol), subResult)
+				}
+				if d2 == 1 {
+					fmt.Printf("Depth %d:%d, Symbol %s: Result: %v\n", d, d2, string(symbol), subResult)
+					if subResult != string(symbol) {
+						t.Errorf("Depth %d:%d, Symbol %s Expected output to be %s, but got %s", d, d2, string(symbol), string(symbol), subResult)
+					}
+				}
+				subOutput = subResult
+			}
+		}
+	}
+}
+
 func TestGenerateDirectionalValuesForCoordBaseCase(t *testing.T) {
+	depth := 0
 	testCases := []struct {
 		coord           day21.Coord
 		input           rune
@@ -235,7 +291,7 @@ func TestGenerateDirectionalValuesForCoordBaseCase(t *testing.T) {
 		for _, tc := range testCases {
 			tc := tc // capture range variable
 			t.Run(fmt.Sprintf("Coord: (%d, %d), Input: %c", tc.coord.X, tc.coord.Y, tc.input), func(t *testing.T) {
-				output := generateDirectionalValuesForCoord(tc.coord, tc.input)
+				output := generateDirectionalValuesForCoord(tc.coord, tc.input)[depth]
 				if !slices.Contains(tc.possibleOutputs, output) {
 					t.Errorf("Expected output to contain %s, but got %s", tc.possibleOutputs, output)
 				}
@@ -264,96 +320,63 @@ func TestGenerateDirectionalValuesForCoordBaseCase(t *testing.T) {
 
 func TestGenerateDirectionalValuesForCoordSecondLocation(t *testing.T) {
 	testCases := []struct {
-		coord           day21.Coord
-		input           rune
-		possibleOutputs []string
+		coord          day21.Coord
+		input          rune
+		expectedOutput []string
 	}{
-		{coord: day21.Coord{X: 0, Y: 1}, input: '^', possibleOutputs: []string{">^A"}},
-		{coord: day21.Coord{X: 0, Y: 1}, input: '<', possibleOutputs: []string{"A"}},
-		{coord: day21.Coord{X: 0, Y: 1}, input: 'v', possibleOutputs: []string{">A"}},
-		{coord: day21.Coord{X: 0, Y: 1}, input: '>', possibleOutputs: []string{">>A"}},
-		{coord: day21.Coord{X: 0, Y: 1}, input: 'A', possibleOutputs: []string{">>^A", ">^>A"}},
+		{coord: day21.Coord{X: 0, Y: 1}, input: '^', expectedOutput: []string{">^A"}},
+		{coord: day21.Coord{X: 0, Y: 1}, input: '<', expectedOutput: []string{"A"}},
+		{coord: day21.Coord{X: 0, Y: 1}, input: 'v', expectedOutput: []string{">A"}},
+		{coord: day21.Coord{X: 0, Y: 1}, input: '>', expectedOutput: []string{">>A"}},
+		{coord: day21.Coord{X: 0, Y: 1}, input: 'A', expectedOutput: []string{">>^A", ">^>A"}},
 	}
 
-	outputsSeen := make(map[rune]map[string]int)
-	for i := range 20 {
-		t.Logf("Test %d\n", i)
-		for _, tc := range testCases {
-			tc := tc // capture range variable
-			t.Run(fmt.Sprintf("Coord: (%d, %d), Input: %c", tc.coord.X, tc.coord.Y, tc.input), func(t *testing.T) {
-				output := generateDirectionalValuesForCoord(tc.coord, tc.input)
-				if !slices.Contains(tc.possibleOutputs, output) {
-					t.Errorf("Expected output to contain %s, but got %s", tc.possibleOutputs, output)
-				}
-				if _, ok := outputsSeen[tc.input]; !ok {
-					outputsSeen[tc.input] = make(map[string]int)
-				}
-				outputsSeen[tc.input][output]++
-			})
-		}
-	}
-	// Check that the count of outputs seen is the same as the count of expected outputs for each test case
 	for _, tc := range testCases {
 		tc := tc // capture range variable
-		outputsSeenCount := len(outputsSeen[tc.input])
-		if outputsSeenCount != len(tc.possibleOutputs) {
-			e := fmt.Sprintf("\nTest Case: %s\n", string(tc.input))
-			e += fmt.Sprintf("    Expected %d unique outputs, but got %d\n", len(tc.possibleOutputs), outputsSeenCount)
-			for k, v := range outputsSeen[tc.input] {
-				e += fmt.Sprintf("        %s: %d\n", k, v)
+		t.Run(fmt.Sprintf("Coord: (%d, %d), Input: %c", tc.coord.X, tc.coord.Y, tc.input), func(t *testing.T) {
+			output := generateDirectionalValuesForCoord(tc.coord, tc.input)
+			if len(output) != len(tc.expectedOutput) {
+				t.Errorf("Expected output to be %d rows, but got %d rows", len(tc.expectedOutput), len(output))
+				t.FailNow()
 			}
-			t.Error(e)
-		}
-
+			for _, o := range output {
+				if !slices.Contains(tc.expectedOutput, o) {
+					t.Errorf("Expected output to contain %s, but got %s", tc.expectedOutput, output)
+					t.FailNow()
+				}
+			}
+		})
 	}
 }
+
 func TestGenerateOptimalDirectionalValuesForCoordBaseCase(t *testing.T) {
+	depth := 1
 	testCases := []struct {
 		coord           day21.Coord
 		input           rune
 		possibleOutputs []string
 	}{
 		{coord: day21.Coord{X: 2, Y: 0}, input: '^', possibleOutputs: []string{"<A"}},
-		{coord: day21.Coord{X: 2, Y: 0}, input: '<', possibleOutputs: []string{"v<<A"}},
+		{coord: day21.Coord{X: 2, Y: 0}, input: '<', possibleOutputs: []string{"<v<A"}}, // This value is ONLY valid at depth 1
 		{coord: day21.Coord{X: 2, Y: 0}, input: 'v', possibleOutputs: []string{"<vA", "v<A"}},
 		{coord: day21.Coord{X: 2, Y: 0}, input: '>', possibleOutputs: []string{"vA"}},
 		{coord: day21.Coord{X: 2, Y: 0}, input: 'A', possibleOutputs: []string{"A"}},
 	}
 
-	outputsSeen := make(map[rune]map[string]int)
-	for i := range 20 {
-		t.Logf("Test %d\n", i)
-		for _, tc := range testCases {
-			tc := tc // capture range variable
-			t.Run(fmt.Sprintf("Coord: (%d, %d), Input: %c", tc.coord.X, tc.coord.Y, tc.input), func(t *testing.T) {
-				output := generateOptimalDirectionalValuesForCoord(tc.coord, tc.input)
-				if !slices.Contains(tc.possibleOutputs, output) {
-					t.Errorf("Expected output to contain %s, but got %s", tc.possibleOutputs, output)
-				}
-				if _, ok := outputsSeen[tc.input]; !ok {
-					outputsSeen[tc.input] = make(map[string]int)
-				}
-				outputsSeen[tc.input][output]++
-			})
-		}
-	}
-	// Check that the count of outputs seen is the same as the count of expected outputs for each test case
 	for _, tc := range testCases {
 		tc := tc // capture range variable
-		outputsSeenCount := len(outputsSeen[tc.input])
-		if outputsSeenCount != len(tc.possibleOutputs) {
-			e := fmt.Sprintf("\nTest Case: %s\n", string(tc.input))
-			e += fmt.Sprintf("    Expected %d unique outputs, but got %d\n", len(tc.possibleOutputs), outputsSeenCount)
-			for k, v := range outputsSeen[tc.input] {
-				e += fmt.Sprintf("        %s: %d\n", k, v)
+		t.Run(fmt.Sprintf("Coord: (%d, %d), Input: %c", tc.coord.X, tc.coord.Y, tc.input), func(t *testing.T) {
+			output := generateOptimalDirectionalValuesForCoord(tc.coord, tc.input, depth)[depth]
+			if !slices.Contains(tc.possibleOutputs, output) {
+				t.Errorf("Expected output to contain %s, but got %s", tc.possibleOutputs, output)
 			}
-			t.Error(e)
-		}
-
+		})
 	}
+
 }
 
 func TestGenerateOptimalDirectionalValuesForCoordSecondLocation(t *testing.T) {
+	depth := 1
 	testCases := []struct {
 		coord           day21.Coord
 		input           rune
@@ -372,7 +395,7 @@ func TestGenerateOptimalDirectionalValuesForCoordSecondLocation(t *testing.T) {
 		for _, tc := range testCases {
 			tc := tc // capture range variable
 			t.Run(fmt.Sprintf("Coord: (%d, %d), Input: %c", tc.coord.X, tc.coord.Y, tc.input), func(t *testing.T) {
-				output := generateOptimalDirectionalValuesForCoord(tc.coord, tc.input)
+				output := generateOptimalDirectionalValuesForCoord(tc.coord, tc.input, depth)[depth]
 				if !slices.Contains(tc.possibleOutputs, output) {
 					t.Errorf("Expected output to contain %s, but got %s", tc.possibleOutputs, output)
 				}

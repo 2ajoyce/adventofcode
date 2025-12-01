@@ -12,7 +12,7 @@ func TestDirectionalCalculateMovementsBaseCases(t *testing.T) {
 		input          rune
 		expectedOutput []string
 	}{
-		{name: "Test A", start: Coord{2, 0}, input: 'A', expectedOutput: []string{}},
+		{name: "Test A", start: Coord{2, 0}, input: 'A', expectedOutput: []string{"A"}},
 		{name: "Test ^", start: Coord{2, 0}, input: '^', expectedOutput: []string{"<A"}},
 		{name: "Test <", start: Coord{2, 0}, input: '<', expectedOutput: []string{"v<<A", "<v<A"}},
 		{name: "Test >", start: Coord{2, 0}, input: '>', expectedOutput: []string{"vA"}},
