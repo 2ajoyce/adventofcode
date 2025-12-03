@@ -85,7 +85,7 @@ func TestSolve2(t *testing.T) {
 			{start: "565653", end: "565659"},
 			{start: "824824821", end: "824824827"},
 			{start: "2121212118", end: "2121212124"},
-		}, output: "1227775554"},
+		}, output: "4174379265"},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -96,7 +96,7 @@ func TestSolve2(t *testing.T) {
 					inputChan <- &Span{start: line.Start(), end: line.End()}
 				}
 			}()
-			result, err := Solve1(inputChan)
+			result, err := Solve2(inputChan)
 			if err != nil {
 				t.Errorf("Unexpected error: %v", err)
 			}
@@ -140,6 +140,39 @@ func TestCheckSpan(t *testing.T) {
 		})
 	}
 }
+func TestCheckSpan2(t *testing.T) {
+	var testCases = []struct {
+		name   string
+		input  *TestSpan
+		output []string
+	}{
+		{name: "", input: &TestSpan{start: "11", end: "22"}, output: []string{"11", "22"}},
+		{name: "", input: &TestSpan{start: "95", end: "115"}, output: []string{"99", "111"}},
+		{name: "", input: &TestSpan{start: "998", end: "1012"}, output: []string{"999", "1010"}},
+		{name: "", input: &TestSpan{start: "1188511880", end: "1188511890"}, output: []string{"1188511885"}},
+		{name: "", input: &TestSpan{start: "222220", end: "222224"}, output: []string{"222222"}},
+		{name: "", input: &TestSpan{start: "1698522", end: "1698528"}, output: []string{}},
+		{name: "", input: &TestSpan{start: "446443", end: "446449"}, output: []string{"446446"}},
+		{name: "", input: &TestSpan{start: "38593856", end: "38593862"}, output: []string{"38593859"}},
+		{name: "", input: &TestSpan{start: "565653", end: "565659"}, output: []string{"565656"}},
+		{name: "", input: &TestSpan{start: "824824821", end: "824824827"}, output: []string{"824824824"}},
+		{name: "", input: &TestSpan{start: "2121212118", end: "2121212124"}, output: []string{"2121212121"}},
+		{name: "", input: &TestSpan{start: "3", end: "16"}, output: []string{"11"}},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := CheckSpan2(&Span{start: tc.input.Start(), end: tc.input.End()})
+			if len(result) != len(tc.output) {
+				t.Errorf("For %s | %s expected %v, got %q", tc.input.start, tc.input.end, tc.output, result)
+			}
+			for i, double := range result { // Assume outputs are sorted
+				if StrToInt(tc.output[i]) != ArrRuneToInt(double) {
+					t.Errorf("For %s | %s expected %v, got %q", tc.input.start, tc.input.end, tc.output, result)
+				}
+			}
+		})
+	}
+}
 
 func TestStripPadding(t *testing.T) {
 	var testCases = []struct {
@@ -174,6 +207,43 @@ func TestStripPadding(t *testing.T) {
 				if result[i] != r {
 					t.Errorf("Expected %s, got %c", tc.output, result)
 				}
+			}
+		})
+	}
+}
+
+func TestIsInvalidId(t *testing.T) {
+	var testCases = []struct {
+		name   string
+		input  string
+		output bool
+	}{
+		{name: "", input: "0", output: false},
+		{name: "", input: "00", output: false},
+		{name: "", input: "1", output: false},
+		{name: "", input: "12", output: false},
+		{name: "", input: "12341234", output: true},
+		{name: "", input: "123123123", output: true},
+		{name: "", input: "1212121212", output: true},
+		{name: "", input: "1111111", output: true},
+		{name: "", input: "11", output: true},
+		{name: "", input: "22", output: true},
+		{name: "", input: "99", output: true},
+		{name: "", input: "111", output: true},
+		{name: "", input: "999", output: true},
+		{name: "", input: "1010", output: true},
+		{name: "", input: "1188511885", output: true},
+		{name: "", input: "446446", output: true},
+		{name: "", input: "38593859", output: true},
+		{name: "", input: "565656", output: true},
+		{name: "", input: "824824824", output: true},
+		{name: "", input: "2121212121", output: true},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := IsInvalidId(StrToArrRune(tc.input))
+			if result != tc.output {
+				t.Errorf("Expected %t, got %t", tc.output, result)
 			}
 		})
 	}

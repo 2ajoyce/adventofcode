@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -86,7 +87,7 @@ func Solve1(input chan *Span) (string, error) {
 func Solve2(input chan *Span) (string, error) {
 	result := 0
 	for span := range input {
-		invalidIds := CheckSpan(span)
+		invalidIds := CheckSpan2(span)
 		for _, id := range invalidIds {
 			result += ArrRuneToInt(id)
 		}
@@ -97,7 +98,6 @@ func Solve2(input chan *Span) (string, error) {
 // CheckSpan will assess all numbers in a span, returning any that are "doubles"
 // This version takes the easy approach iterating over every number in the span.
 func CheckSpan(s *Span) [][]rune {
-	fmt.Printf("CheckSpan: %c | %c\n", s.start, s.end)
 	// Doubled numbers can't be odd so we can rule out any span where the start and end have N digits and N is odd
 	if len(s.start) == len(s.end) && len(s.start)%2 != 0 {
 		return [][]rune{}
@@ -119,12 +119,10 @@ func CheckSpan(s *Span) [][]rune {
 
 	// Split the number in half to dummyproof logic
 	sLeft := start[0 : len(start)/2]
-	sRight := start[len(start)/2:]
-	fmt.Printf("Start: %c | %c\n", sLeft, sRight)
+	// sRight := start[len(start)/2:]
 
 	eLeft := end[0 : len(end)/2]
-	eRight := end[len(end)/2:]
-	fmt.Printf("End: %c | %c\n", eLeft, eRight)
+	// eRight := end[len(end)/2:]
 
 	// Get numeric representations to work with
 	sLeftI := ArrRuneToInt(sLeft)
@@ -149,51 +147,81 @@ func CheckSpan(s *Span) [][]rune {
 	return doubles
 }
 
-// CheckSpan will assess all numbers in a span, returning any that are "doubles"
-// This version attempts to be smarter than brute force, but is not yet functional
-func CheckSpan1(s *Span) []string {
-	fmt.Printf("CheckSpan: %c | %c\n", s.start, s.end)
-	// Doubled numbers can't be odd so we can rule out any span where the start and end have N digits and N is odd
-	if len(s.start) == len(s.end) && len(s.start)%2 != 0 {
-		return []string{}
+// CheckSpan2 will assess all numbers in a span, returning any that are combinations of the same digits repeated at least twice
+func CheckSpan2(s *Span) [][]rune {
+	possibleReps := [][]rune{}
+	start := ArrRuneToInt(s.start)
+	end := ArrRuneToInt(s.end)
+	for start <= end {
+		if IsInvalidId(IntToArrRune(start)) {
+			possibleReps = append(possibleReps, IntToArrRune(start))
+		}
+		start++
 	}
-	// If we've reached this point there are two possible cases
-	// - The start and end have length N and N is even
-	// - The start and end have different lengths
 
-	// Case1: The start and end have length N and N is even
-	// Whether doubles will exist in this range can be determined by walking the digits from left to right
-	//   ie, 10, 19: 1 -> 1 gives us no flexibility in the first place
-	//   ie, 10, 99: 1 -> 9 gives us 8 digits of flexibility in the first place
+	sNum := ArrRuneToInt(s.start)
+	eNum := ArrRuneToInt(s.end)
+	// Limit to min/max & two digits
+	limited := limitMinMax(possibleReps, sNum, eNum)
 
-	// Once we reach a digit that has flexibility we can start to construct the double
-	//   ie:  10, 19: The first half is 1 with no flexibility. That means the only possible double is 11
-	//   We can check if 11 is less than the end. 11 < 19, so we can stop searching and return that.
+	// Dedupe
+	deduped := dedupeRuneSlices(limited)
 
-	//   ie: 10, 99: The first half is 1, 2, 3, 4, 5, 6, 7, 8, 9. The doubles would be 11, 22, 33, 44, 55, 66, 77, 88, 99.
-	//   We can compare each double to the end(inclusive) and stop searching. All doubles can be returned.
+	// Sort the results for test consistency
+	sortRuneSlicesByIntValue(deduped)
 
-	//   ie: 1000, 1012: The first half is 10:10, 1->1, 0->0 have no flexibility. The only possible couple is 1010
-	//   We can compare 1010 to the end(inclusive) and stop searching. 1010 can be returned.
+	return deduped
+}
 
-	// Split the number in half to dummyproof logic
-	sLeft := s.start[0 : len(s.start)/2]
-	sRight := s.start[len(s.start)/2:]
-	fmt.Printf("Start: %c | %c\n", sLeft, sRight)
+func IsInvalidId(r []rune) bool {
+	n := len(r)
+	// A single digit can't be invalid
+	if n < 2 {
+		return false
+	}
 
-	for i, d := range sLeft { // For every digit in the left half of the start
-		if d == rune(sRight[i]) {
-			fmt.Printf("%c & %c are the same\n", d, rune(sRight[i]))
-			continue
-		} else {
+	// Can't be all zeros
+	if isAllZeros(r) {
+		return false
+	}
 
+	// Try all possible chunk sizes that could repeat to form the whole ID.
+	for size := 1; size <= n/2; size++ {
+		if n%size != 0 {
+			continue // chunk size must divide the total length
+		}
+
+		repeats := n / size
+		if repeats < 2 {
+			continue // must repeat at least once
+		}
+
+		// Check if this is a repeated pattern
+		if isRepeatedPattern(r, size) {
+			return true
 		}
 	}
 
-	// Case 2: The start and end have different lengths
-	// WIP
+	return false // no repeated pattern found => valid
+}
 
-	return []string{}
+func isAllZeros(r []rune) bool {
+	for _, d := range r {
+		if d != '0' {
+			return false
+		}
+	}
+	return len(r) > 0
+}
+
+// isRepeatedPattern returns true if r is made of r[0:size] repeated.
+func isRepeatedPattern(r []rune, size int) bool {
+	for i := size; i < len(r); i++ {
+		if r[i] != r[i%size] {
+			return false
+		}
+	}
+	return true
 }
 
 func StrToArrRune(s string) []rune {
@@ -218,4 +246,44 @@ func StrToInt(s string) int {
 		panic(fmt.Sprintf("failed to convert string %q to integer: %v", s, err))
 	}
 	return num
+}
+
+func ArrRuneToStr(r []rune) string {
+	return string(r)
+}
+
+func limitMinMax(reps [][]rune, sNum, eNum int) [][]rune {
+	result := [][]rune{}
+
+	for _, r := range reps {
+		id := ArrRuneToInt(r)
+		if id < sNum || id > eNum || id < 10 {
+			continue
+		}
+		result = append(result, r)
+	}
+
+	return result
+}
+
+func dedupeRuneSlices(reps [][]rune) [][]rune {
+	seen := make(map[int]struct{})
+	result := [][]rune{}
+
+	for _, r := range reps {
+		id := ArrRuneToInt(r)
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		result = append(result, r)
+	}
+
+	return result
+}
+
+func sortRuneSlicesByIntValue(slices [][]rune) {
+	sort.Slice(slices, func(i, j int) bool {
+		return ArrRuneToInt(slices[i]) < ArrRuneToInt(slices[j])
+	})
 }
