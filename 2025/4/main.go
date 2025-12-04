@@ -74,10 +74,29 @@ func Solve2(input chan [][]rune) (string, error) {
 	total := 0
 	// The use of a channel here is contrived, but most problems have been processed line by line
 	grid := <-input
-	if IsPaper(grid[0][0]) {
-		total++
-	}
 	// PrintGrid(grid)
+	h := CalculateHeatmap(grid)
+	// PrintHeatmap(h)
+
+	for {
+		paperRemoved := false
+		// Iterate over the grid, removing all paper
+		for y, row := range grid {
+			for x, c := range row {
+				if IsPaper(c) && h[y][x] < 4 {
+					grid[y][x] = '.' // Remove the paper from the grid
+					total++
+					paperRemoved = true
+				}
+			}
+		}
+		if paperRemoved == false {
+			break // No more paper can be removed
+		}
+		// Recalculate the new heatmap
+		h = CalculateHeatmap(grid)
+	}
+
 	return fmt.Sprintf("%d", total), nil
 }
 

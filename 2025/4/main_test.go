@@ -52,17 +52,17 @@ func TestSolve2(t *testing.T) {
 		output string
 	}{
 		{name: "AOC Example 1", input: []string{
-			"..@@.@@@@.", // ..xx.xx@x.
-			"@@@.@.@.@@", // x@@.@.@.@@
-			"@@@@@.@.@@", // @@@@@.x.@@
-			"@.@@@@..@.", // @.@@@@..@.
-			"@@.@@@@.@@", // x@.@@@@.@x
-			".@@@@@@@.@", // .@@@@@@@.@
-			".@.@.@.@@@", // .@.@.@.@@@
-			"@.@@@.@@@@", // x.@@@.@@@@
-			".@@@@@@@@.", // .@@@@@@@@.
-			"@.@.@@@.@.", // x.x.@@@.x.
-		}, output: "13"},
+			"..@@.@@@@.",
+			"@@@.@.@.@@",
+			"@@@@@.@.@@",
+			"@.@@@@..@.",
+			"@@.@@@@.@@",
+			".@@@@@@@.@",
+			".@.@.@.@@@",
+			"@.@@@.@@@@",
+			".@@@@@@@@.",
+			"@.@.@@@.@.",
+		}, output: "43"},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -75,7 +75,7 @@ func TestSolve2(t *testing.T) {
 				}
 				inputChan <- input
 			}()
-			result, err := Solve1(inputChan)
+			result, err := Solve2(inputChan)
 			if err != nil {
 				t.Errorf("Unexpected error: %v", err)
 			}
