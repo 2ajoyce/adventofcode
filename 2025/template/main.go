@@ -38,9 +38,15 @@ func ReadInput(filepath string, c chan string) {
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		line := scanner.Text()
-		c <- line
+		c <- ParseInput(line)
 	}
 	close(c)
+}
+
+// ParseInput parses the input into the necessary data structure.
+// On more complex inputs, this allows us to use lines of text as input for tests
+func ParseInput(input string) string {
+	return input
 }
 
 func Solve1(input chan string) (string, error) {

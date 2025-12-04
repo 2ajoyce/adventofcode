@@ -22,7 +22,7 @@ func TestSolve1(t *testing.T) {
 			go func() {
 				defer close(inputChan)
 				for _, line := range tc.input {
-					inputChan <- line
+					inputChan <- ParseInput(line)
 				}
 			}()
 			result, err := Solve1(inputChan)
@@ -54,7 +54,7 @@ func TestSolve2(t *testing.T) {
 			go func() {
 				defer close(inputChan)
 				for _, line := range tc.input {
-					inputChan <- line
+					inputChan <- ParseInput(line)
 				}
 			}()
 			result, err := Solve2(inputChan)
