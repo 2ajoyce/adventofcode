@@ -48,7 +48,7 @@ func TestSolve2(t *testing.T) {
 			"811111111111119",
 			"234234234234278",
 			"818181911112111",
-		}, output: "357"},
+		}, output: "3121910778619"},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -59,7 +59,7 @@ func TestSolve2(t *testing.T) {
 					inputChan <- ParseLine(line)
 				}
 			}()
-			result, err := Solve1(inputChan)
+			result, err := Solve2(inputChan)
 			if err != nil {
 				t.Errorf("Unexpected error: %v", err)
 			}
@@ -77,11 +77,6 @@ func TestFindLargestPair(t *testing.T) {
 		output []int
 	}{
 		{name: "1273465", input: "1273465", output: []int{7, 6}},
-
-		{name: "987654321111111", input: "987654321111111", output: []int{9, 8}},
-		{name: "811111111111119", input: "811111111111119", output: []int{8, 9}},
-		{name: "234234234234278", input: "234234234234278", output: []int{7, 8}},
-		{name: "818181911112111", input: "818181911112111", output: []int{9, 2}},
 
 		{name: "empty string", input: "", output: nil},
 		{name: "length 1", input: "7", output: nil},
@@ -122,10 +117,53 @@ func TestFindLargestPair(t *testing.T) {
 		{name: "mixed structure 1", input: "506734", output: []int{7, 4}},
 		{name: "mixed structure 2", input: "271936", output: []int{9, 6}},
 		{name: "mixed structure 3", input: "864208", output: []int{8, 8}},
+
+		// AOC Examples
+		{name: "987654321111111", input: "987654321111111", output: []int{9, 8}},
+		{name: "811111111111119", input: "811111111111119", output: []int{8, 9}},
+		{name: "234234234234278", input: "234234234234278", output: []int{7, 8}},
+		{name: "818181911112111", input: "818181911112111", output: []int{9, 2}},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			result := FindLargestPair(ParseLine(tc.input))
+			if len(result) != len(tc.output) {
+				t.Errorf("Expected %d, got %d", tc.output, result)
+			}
+			for i, d := range result {
+				if d != tc.output[i] {
+					t.Errorf("Expected %d, got %d", tc.output, result)
+				}
+			}
+		})
+	}
+}
+
+func TestFindLargest12(t *testing.T) {
+	var testCases = []struct {
+		name   string
+		input  string
+		output []int
+	}{
+		{name: "empty string", input: "", output: nil},
+		{name: "length 1", input: "7", output: nil},
+		{name: "length 11", input: "12345678901", output: nil},
+		{name: "exactly 12 digits mixed", input: "123456789012", output: []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2}},
+		{name: "increasing with wrap", input: "123456789012345", output: []int{4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5}},
+		{name: "decreasing with repeated highs", input: "987654321098765", output: []int{9, 8, 7, 6, 5, 4, 3, 9, 8, 7, 6, 5}},
+		{name: "all nines", input: "999999999999999", output: []int{9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9}},
+		{name: "ones with trailing nine", input: "111111111111119", output: []int{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 9}},
+		{name: "zeros then nines", input: "000000000009999", output: []int{0, 0, 0, 0, 0, 0, 0, 0, 9, 9, 9, 9}},
+		{name: "alternating 9 and 0", input: "909090909090909", output: []int{9, 9, 9, 9, 0, 9, 0, 9, 0, 9, 0, 9}},
+		// AOC examples
+		{name: "987654321111111", input: "987654321111111", output: []int{9, 8, 7, 6, 5, 4, 3, 2, 1, 1, 1, 1}},
+		{name: "811111111111119", input: "811111111111119", output: []int{8, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 9}},
+		{name: "234234234234278", input: "234234234234278", output: []int{4, 3, 4, 2, 3, 4, 2, 3, 4, 2, 7, 8}},
+		{name: "818181911112111", input: "818181911112111", output: []int{8, 8, 8, 9, 1, 1, 1, 1, 2, 1, 1, 1}},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := FindLargestTwelve(ParseLine(tc.input))
 			if len(result) != len(tc.output) {
 				t.Errorf("Expected %d, got %d", tc.output, result)
 			}

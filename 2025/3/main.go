@@ -69,7 +69,8 @@ func Solve1(input chan []int) (string, error) {
 func Solve2(input chan []int) (string, error) {
 	total := 0
 	for line := range input {
-		total += len(line)
+		digits := FindLargestTwelve(line)
+		total += digitsToInt(digits)
 	}
 	return fmt.Sprintf("%d", total), nil
 }
@@ -105,6 +106,67 @@ func FindLargestPair(line []int) []int {
 		panic(fmt.Sprintf("we reached the end of the loop without a p2 value for line %v", line))
 	}
 	return []int{line[p1], line[p2]}
+}
+
+func FindLargestTwelve(line []int) []int {
+	var NUMBER_OF_POINTERS = 12
+
+	if len(line) < NUMBER_OF_POINTERS {
+		return nil
+	}
+
+	// Initialize our pointers
+	pointers := make([]int, NUMBER_OF_POINTERS)
+	pointers[0] = 0
+	for i := 1; i < len(pointers); i++ {
+		pointers[i] = -1
+	}
+
+	// Iterate over the line
+	for i := range line {
+		if i == 0 { // Skip the first value
+			continue
+		}
+		// If the current line[index] is larger than existing p0 value, reassign
+		// Skip if there aren't enough values left to fit all pointers
+		if line[i] > line[pointers[0]] && i <= len(line)-len(pointers) {
+			pointers[0] = i
+			wipePointers(pointers, 1)
+		} else {
+			// Iterate over the pointers to check if we can update any of them
+			for j, p := range pointers {
+				if j == 0 { // Skip the first pointer
+					continue
+				}
+
+				// If the current pointer is unassigned
+				if p == -1 {
+					pointers[j] = i
+					wipePointers(pointers, j+1)
+					break
+					// Else if the current pointer is assigned but smaller
+					// AND we have enough digits left
+				} else if line[i] > line[p] && len(line)-i >= len(pointers)-j {
+					pointers[j] = i
+					wipePointers(pointers, j+1)
+					break
+				}
+			}
+		}
+	}
+
+	// Initialize our result
+	result := make([]int, NUMBER_OF_POINTERS)
+	for i := 0; i < len(pointers); i++ {
+		result[i] = line[pointers[i]]
+	}
+	return result
+}
+
+func wipePointers(p []int, start int) {
+	for i := start; i < len(p); i++ {
+		p[i] = -1
+	}
 }
 
 func digitsToInt(digits []int) int {
