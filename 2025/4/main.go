@@ -55,7 +55,18 @@ func Solve1(input chan [][]rune) (string, error) {
 	total := 0
 	// The use of a channel here is contrived, but most problems have been processed line by line
 	grid := <-input
-	PrintGrid(grid)
+	// PrintGrid(grid)
+	h := CalculateHeatmap(grid)
+	// PrintHeatmap(h)
+
+	for y, row := range grid {
+		for x, c := range row {
+			if IsPaper(c) && h[y][x] < 4 {
+				total++
+			}
+		}
+	}
+
 	return fmt.Sprintf("%d", total), nil
 }
 
@@ -63,7 +74,10 @@ func Solve2(input chan [][]rune) (string, error) {
 	total := 0
 	// The use of a channel here is contrived, but most problems have been processed line by line
 	grid := <-input
-	PrintGrid(grid)
+	if IsPaper(grid[0][0]) {
+		total++
+	}
+	// PrintGrid(grid)
 	return fmt.Sprintf("%d", total), nil
 }
 
@@ -75,4 +89,81 @@ func PrintGrid(g [][]rune) {
 		}
 		fmt.Println()
 	}
+}
+
+func PrintHeatmap(g [][]int) {
+	for _, row := range g {
+		fmt.Print("|")
+		for _, char := range row {
+			fmt.Printf("%d|", char)
+		}
+		fmt.Println()
+	}
+}
+
+func IsEmpty(r rune) bool {
+	if r == '.' {
+		return true
+	}
+	return false
+}
+
+func IsPaper(r rune) bool {
+	if r == '@' {
+		return true
+	}
+	return false
+}
+
+type Coord struct {
+	x int
+	y int
+}
+
+// Nearby returns the 8 coordinates surrounding c.
+// It removes coordinates that fall outside the range [0, max].
+func (c *Coord) Nearby(maxX, maxY int) []Coord {
+	var result []Coord
+
+	// Offsets for the 8 surrounding cells
+	deltas := []struct{ dx, dy int }{
+		{-1, -1}, {0, -1}, {1, -1},
+		{-1, 0}, {1, 0},
+		{-1, 1}, {0, 1}, {1, 1},
+	}
+
+	for _, d := range deltas {
+		nx := c.x + d.dx
+		ny := c.y + d.dy
+
+		// Check bounds (≥0 and ≤max)
+		if nx >= 0 && ny >= 0 && nx <= maxX && ny <= maxY {
+			result = append(result, Coord{nx, ny})
+		}
+	}
+
+	return result
+}
+
+func CalculateHeatmap(g [][]rune) [][]int {
+	// Initialize the heatmap
+	h := make([][]int, len(g))
+	for i, _ := range h {
+		h[i] = make([]int, len(g[0]))
+	}
+
+	// Loop over every square in the input
+	for y, row := range g {
+		for x, char := range row {
+			// If the square is paper, increase the surrounding heatmap values by one
+			if IsPaper(char) {
+				current := Coord{x, y}
+				surrounding := current.Nearby(len(g[0])-1, len(g)-1)
+				for _, c := range surrounding {
+					h[c.y][c.x]++
+				}
+			}
+		}
+	}
+	return h
 }
