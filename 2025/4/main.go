@@ -24,6 +24,10 @@ func main() {
 		panic(err)
 	}
 	fmt.Println(result)
+
+	input = make(chan [][]rune)
+	go ReadInput("input2.txt", input)
+	RunVisualization(<-input)
 }
 
 // ReadInput reads the input from the filepath and sends each line to the provided channel.
@@ -98,6 +102,10 @@ func Solve2(input chan [][]rune) (string, error) {
 	}
 
 	return fmt.Sprintf("%d", total), nil
+}
+
+func Visualization(grid [][]rune) {
+	RunVisualization(grid)
 }
 
 func PrintGrid(g [][]rune) {

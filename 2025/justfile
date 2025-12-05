@@ -7,7 +7,7 @@ init day:
     python scripts/start-day.py {{day}}
 
 run day:
-    cd {{day}} && go run main.go
+    cd {{day}} && go run .
 
 # Normal test, only outputs failures
 test day:
