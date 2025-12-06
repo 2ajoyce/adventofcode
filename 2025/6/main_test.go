@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"testing"
 )
 
@@ -13,9 +12,9 @@ func TestSolve1(t *testing.T) {
 	}{
 		{name: "AOC Example 1", input: []string{
 			"123 328  51 64 ",
-			"45 64  387 23 ",
-			"6 98  215 314",
-			"*   +   *   + ",
+			" 45 64  387 23 ",
+			"  6 98  215 314",
+			"*   +   *   +  ",
 		}, output: "4277556"},
 	}
 	for _, tc := range testCases {
@@ -45,13 +44,14 @@ func TestSolve2(t *testing.T) {
 		output string
 	}{
 		{name: "AOC Example 1", input: []string{
-			"123",
-			"456",
-		}, output: "6"},
+			"123 328  51 64 ",
+			" 45 64  387 23 ",
+			"  6 98  215 314",
+			"*   +   *   +  ",
+		}, output: "3263827"},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			fmt.Println(tc.name)
 			inputChan := make(chan string)
 			go func() {
 				defer close(inputChan)

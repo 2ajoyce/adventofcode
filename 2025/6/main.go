@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 )
 
@@ -97,8 +98,75 @@ func Solve1(input chan string) (string, error) {
 
 func Solve2(input chan string) (string, error) {
 	total := 0
+	var problems [][]int   // An array of the problems. Each problem is an array of numbers.
+	operands := []string{} // Each problem has an operand
+	lines := [][]rune{}
 	for line := range input {
-		total += len(string(line)) // Increment the total by the number of characters in the line
+		lines = append(lines, StrToArrRune(line))
 	}
+
+	// Remove the last line (operands)
+	operandLine := lines[len(lines)-1]
+	lines = lines[:len(lines)-1]
+	for v := range strings.FieldsSeq(ArrRuneToStr(operandLine)) {
+		operands = append(operands, v)
+	}
+	// Reverse opperands
+	slices.Reverse(operands)
+
+	// Find the longest line
+	longest := 0
+	problemCount := 0
+	for _, line := range lines {
+		if longest < len(line) {
+			longest = len(line)
+			problemCount = len(strings.Fields(ArrRuneToStr(line)))
+		}
+	}
+
+	// Initialize the problems array
+	problems = make([][]int, problemCount)
+
+	// The longest line determines how many columns we will read in
+	currentProblem := 0
+	for i := longest; i >= 0; i-- {
+		emptyDigitCount := 0
+		problemString := []rune{}
+		for _, line := range lines {
+			if len(line) <= i {
+				continue
+			}
+			if line[i] == ' ' {
+				emptyDigitCount++
+				continue
+			}
+			problemString = append(problemString, line[i])
+		}
+		if emptyDigitCount == len(lines) {
+			currentProblem++
+		}
+		if len(problemString) > 0 {
+			problems[currentProblem] = append(problems[currentProblem], ArrRuneToInt(problemString))
+		}
+	}
+
+	// For every problem
+	for i, p := range problems {
+		solution := p[0] // Start with the first number
+		for j, v := range p {
+			if j == 0 { // Skip the first number
+				continue
+			}
+
+			switch operands[i] {
+			case "+":
+				solution = solution + v
+			case "*":
+				solution = solution * v
+			}
+		}
+		total = total + solution
+	}
+
 	return fmt.Sprintf("%d", total), nil
 }
