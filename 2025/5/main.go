@@ -83,12 +83,10 @@ func Solve1(cRange chan Range, cInt chan int) (string, error) {
 	tree := interval.NewIntervalTree()
 
 	for r := range cRange {
-		fmt.Printf("Inserting %d-%d\n", r.start, r.end)
 		tree.Insert(r.start, r.end)
 	}
 
 	for i := range cInt {
-		fmt.Printf("Searching for %d\n", i)
 		nodes := tree.Search(i)
 		if len(nodes) > 0 {
 			total++
