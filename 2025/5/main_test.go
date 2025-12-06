@@ -58,7 +58,6 @@ func TestSolve2(t *testing.T) {
 	var testCases = []struct {
 		name        string
 		inputRanges []Range
-		inputInts   []int
 		output      string
 	}{
 		{name: "AOC Example 1",
@@ -67,33 +66,18 @@ func TestSolve2(t *testing.T) {
 				{start: 10, end: 14},
 				{start: 16, end: 20},
 				{start: 12, end: 18},
-			},
-			inputInts: []int{
-				1,
-				5,
-				8,
-				11,
-				17,
-				32,
-			}, output: "3"},
+			}, output: "14"},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			cRange := make(chan Range)
-			cInt := make(chan int)
 			go func() {
 				defer close(cRange)
 				for _, r := range tc.inputRanges {
 					cRange <- r
 				}
 			}()
-			go func() {
-				defer close(cInt)
-				for _, i := range tc.inputInts {
-					cInt <- i
-				}
-			}()
-			result, err := Solve2(cRange, cInt)
+			result, err := Solve2(cRange)
 			if err != nil {
 				t.Errorf("Unexpected error: %v", err)
 			}

@@ -28,7 +28,7 @@ func main() {
 	cRange = make(chan Range)
 	cInt = make(chan int)
 	go ReadInput("input2.txt", cRange, cInt)
-	result, err = Solve2(cRange, cInt)
+	result, err = Solve2(cRange)
 	if err != nil {
 		panic(err)
 	}
@@ -95,22 +95,34 @@ func Solve1(cRange chan Range, cInt chan int) (string, error) {
 	return fmt.Sprintf("%d", total), nil
 }
 
-func Solve2(cRange chan Range, cInt chan int) (string, error) {
-	total := 0
+func Solve2(cRange chan Range) (string, error) {
+	total := int64(0)
 
 	tree := interval.NewIntervalTree()
 
 	for r := range cRange {
-		tree.Insert(r.start, r.end)
+		tree.InsertWithoutOverlap(r.start, r.end)
 	}
 
-	for i := range cInt {
-		nodes := tree.Search(i)
-		if len(nodes) > 0 {
-			total++
-		}
-	}
+	// DFS to count all ints in all ranges
+	total = Dive(tree.Root)
+
 	return fmt.Sprintf("%d", total), nil
+}
+
+func Dive(n *interval.Node) int64 {
+	total := int64(0)
+
+	total = total + int64(n.End-n.Start+1) // Add one to include end
+
+	if n.Left != nil {
+		total = total + Dive(n.Left)
+	}
+
+	if n.Right != nil {
+		total = total + Dive(n.Right)
+	}
+	return total
 }
 
 func StrToInt(s string) int {
