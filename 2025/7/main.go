@@ -4,6 +4,7 @@ import (
 	"2ajoyce/adventofcode/2025/7/graph"
 	"bufio"
 	"fmt"
+	"math"
 	"os"
 	"slices"
 )
@@ -22,6 +23,15 @@ func main() {
 	input = make(chan string)
 	go ReadInput("input2.txt", input)
 	result, err = Solve2(input)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(result)
+
+	// Second Problem (revisited)
+	input = make(chan string)
+	go ReadInput("input2.txt", input)
+	result, err = Solve3(input)
 	if err != nil {
 		panic(err)
 	}
@@ -176,5 +186,61 @@ func Solve2(input chan string) (string, error) {
 		}
 	}
 	total = g.CountPathsFrom(start)
+	return fmt.Sprintf("%d", total), nil
+}
+
+// Having solved part 2 the slow way, I want to try again
+// without the graph structure
+func Solve3(input chan string) (string, error) {
+	total := 0
+	rows := [][]rune{}
+	totals := [][]int{}
+	for line := range input {
+		rows = append(rows, []rune(line))
+		totals = append(totals, make([]int, len(line)))
+	}
+
+	slices.Reverse(rows)
+	rootIdx := 0
+
+	for y, row := range rows {
+		for x, c := range row {
+			if c == 'S' {
+				rootIdx = x
+			}
+			if c == '.' || c == 'S' {
+				if y > 0 {
+					above := totals[y-1][x]
+					if above > 0 {
+						totals[y][x] += above
+					}
+				}
+			}
+			// Handle splitters
+			if c == '^' {
+				if y == 0 {
+					totals[y][x] = 2
+					continue
+				}
+				aboveLeft := math.Max(float64(totals[y-1][x-1]), 1)
+				aboveRight := math.Max(float64(totals[y-1][x+1]), 1)
+				combined := aboveLeft + aboveRight
+
+				totals[y][x] = int(combined)
+			}
+		}
+		// Clean up negative totals
+		for i, v := range totals[y] {
+			if v < 0 {
+				totals[y][i] = 0
+			}
+		}
+	}
+	total = totals[len(totals)-1][rootIdx]
+	if total < 1 {
+		// Total should be at least 1
+		total = 1
+	}
+
 	return fmt.Sprintf("%d", total), nil
 }
