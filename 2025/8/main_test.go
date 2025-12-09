@@ -84,11 +84,10 @@ func TestSolve2(t *testing.T) {
 			"862,61,35",
 			"984,92,344",
 			"425,690,689",
-		}, numConnections: 10, output: "40"},
+		}, output: "25272"},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Skip("Skipping test for Solve2")
 			fmt.Println(tc.name)
 			inputChan := make(chan *point.Point)
 			go func() {
@@ -97,7 +96,7 @@ func TestSolve2(t *testing.T) {
 					inputChan <- ParseInput(line)
 				}
 			}()
-			result, err := Solve2(inputChan, tc.numConnections)
+			result, err := Solve2(inputChan)
 			if err != nil {
 				t.Errorf("Unexpected error: %v", err)
 			}

@@ -22,7 +22,7 @@ func main() {
 	// Second Problem
 	input = make(chan *point.Point)
 	go ReadInput("input2.txt", input)
-	result, err = Solve2(input, 1000)
+	result, err = Solve2(input)
 	if err != nil {
 		panic(err)
 	}
@@ -116,11 +116,51 @@ func Solve1(input chan *point.Point, numConnections int) (string, error) {
 	return fmt.Sprintf("%d", total), nil
 }
 
-func Solve2(input chan *point.Point, numConnections int) (string, error) {
+func Solve2(input chan *point.Point) (string, error) {
 	total := 0
 	points := []*point.Point{}
+
+	// Read all points
 	for p := range input {
 		points = append(points, p)
 	}
+
+	// Get the distance from each point to all other points
+	pairs := len(points) * (len(points) - 1) / 2
+	distances := make([]struct {
+		a, b     int
+		distance float64
+	}, 0, pairs)
+	for i := range points {
+		for j := i + 1; j < len(points); j++ {
+			d := struct {
+				a, b     int
+				distance float64
+			}{a: i, b: j, distance: points[i].Distance(points[j])}
+			distances = append(distances, d)
+		}
+	}
+
+	// Sort distances
+	sort.Slice(distances, func(i, j int) bool {
+		return distances[i].distance < distances[j].distance
+	})
+
+	// Initialize DSU with all points
+	d := dsu.NewDSU(len(points))
+
+	// Use DSU to connect pairs until all points are connected
+	// We need to track the last two points connected for the result
+	var p1, p2 *point.Point // The last two points connected
+	for i := 0; d.Count() > 1; i++ {
+		a := distances[i].a
+		b := distances[i].b
+		d.Union(a, b)
+		p1 = points[a]
+		p2 = points[b]
+	}
+
+	total = p1.X() * p2.X()
+
 	return fmt.Sprintf("%d", total), nil
 }
