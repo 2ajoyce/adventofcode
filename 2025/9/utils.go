@@ -56,3 +56,24 @@ func intAbs(a int) int {
 	}
 	return a
 }
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func betweenInclusive(v, a, b int) bool {
+	if a > b {
+		a, b = b, a
+	}
+	return v >= a && v <= b
+}

@@ -1,4 +1,4 @@
-package point
+package geometry
 
 import (
 	"fmt"

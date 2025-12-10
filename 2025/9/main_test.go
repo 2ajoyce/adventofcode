@@ -1,7 +1,7 @@
 package main
 
 import (
-	"2ajoyce/adventofcode/2025/9/point"
+	"2ajoyce/adventofcode/2025/9/geometry"
 	"fmt"
 	"testing"
 )
@@ -25,7 +25,7 @@ func TestSolve1(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			inputChan := make(chan *point.Point)
+			inputChan := make(chan *geometry.Point)
 			go func() {
 				defer close(inputChan)
 				for _, point := range tc.input {
@@ -58,13 +58,21 @@ func TestSolve2(t *testing.T) {
 			"2,5",
 			"2,3",
 			"7,3",
-		}, output: "50"},
+		}, output: "24"},
+		{name: "Reddit 1", input: []string{
+			"1,1",
+			"1,5",
+			"3,5",
+			"3,3",
+			"5,3",
+			"5,5",
+			"7,5",
+			"7,1",
+		}, output: "15"},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Skip("Implement me!")
-			fmt.Println(tc.name)
-			inputChan := make(chan *point.Point)
+			inputChan := make(chan *geometry.Point)
 			go func() {
 				defer close(inputChan)
 				for _, point := range tc.input {
@@ -84,13 +92,13 @@ func TestSolve2(t *testing.T) {
 
 func TestArea(t *testing.T) {
 	var testCases = []struct {
-		p1, p2 *point.Point
+		p1, p2 *geometry.Point
 		output int
 	}{
-		{p1: point.NewPoint(2, 5), p2: point.NewPoint(9, 7), output: 24},
-		{p1: point.NewPoint(7, 1), p2: point.NewPoint(11, 7), output: 35},
-		{p1: point.NewPoint(7, 3), p2: point.NewPoint(2, 3), output: 6},
-		{p1: point.NewPoint(2, 5), p2: point.NewPoint(11, 1), output: 50},
+		{p1: geometry.NewPoint(2, 5), p2: geometry.NewPoint(9, 7), output: 24},
+		{p1: geometry.NewPoint(7, 1), p2: geometry.NewPoint(11, 7), output: 35},
+		{p1: geometry.NewPoint(7, 3), p2: geometry.NewPoint(2, 3), output: 6},
+		{p1: geometry.NewPoint(2, 5), p2: geometry.NewPoint(11, 1), output: 50},
 	}
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("%s-%s", tc.p1, tc.p2), func(t *testing.T) {
