@@ -85,27 +85,6 @@ func Solve1(input chan *Graph) (string, error) {
 	return fmt.Sprintf("%d", total), nil
 }
 
-func Solve2(input chan *Graph) (string, error) {
-	total := 0
-	graph := Graph{}
-	for n := range input {
-		// Merge the parsed graph into the main graph
-		for k, v := range *n {
-			// if key already exists, panic
-			if _, ok := graph[k]; ok {
-				panic(fmt.Sprintf("Input contains duplicate key: %s", k))
-			}
-			graph[k] = v
-		}
-	}
-
-	//Find every path from "svr" to "out"
-	// The paths must all also visit both "dac" and "fft" (in any order).
-	total = graph.countPathsDfs("svr", "out", []string{"dac", "fft"})
-
-	return fmt.Sprintf("%d", total), nil
-}
-
 type Graph map[string][]string
 
 func (g *Graph) countPathsDfs(current, target string, mustVisit []string) int {
@@ -153,4 +132,55 @@ func dfsHelper(g Graph, current, target string, visited map[string]bool, req map
 	}
 
 	return total
+}
+
+func Solve2(input chan *Graph) (string, error) {
+	total := 0
+	graph := Graph{}
+	for n := range input {
+		// Merge the parsed graph into the main graph
+		for k, v := range *n {
+			// if key already exists, panic
+			if _, ok := graph[k]; ok {
+				panic(fmt.Sprintf("Input contains duplicate key: %s", k))
+			}
+			graph[k] = v
+		}
+	}
+
+	//Find every path from "svr" to "out"
+	// The paths must all also visit both "dac" and "fft" (in any order).
+	// Assume the graph is acyclic for this DP to be correct
+	svrToDac := graph.CountPaths("svr", "dac")
+	dacToFft := graph.CountPaths("dac", "fft")
+	fftToOut := graph.CountPaths("fft", "out")
+
+	svrToFft := graph.CountPaths("svr", "fft")
+	fftToDac := graph.CountPaths("fft", "dac")
+	dacToOut := graph.CountPaths("dac", "out")
+
+	total = svrToDac*dacToFft*fftToOut + svrToFft*fftToDac*dacToOut
+
+	return fmt.Sprintf("%d", total), nil
+}
+
+func (g Graph) countPathsMemo(start, target string, memo map[string]int) int {
+	if val, ok := memo[start]; ok {
+		return val
+	}
+	if start == target {
+		return 1
+	}
+
+	total := 0
+	for _, next := range g[start] {
+		total += g.countPathsMemo(next, target, memo)
+	}
+	memo[start] = total
+	return total
+}
+
+func (g Graph) CountPaths(start, target string) int {
+	memo := make(map[string]int)
+	return g.countPathsMemo(start, target, memo)
 }
