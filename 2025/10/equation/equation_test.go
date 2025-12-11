@@ -63,7 +63,7 @@ func TestNewButton(t *testing.T) {
 		input       string
 		outputState State
 	}{
-		// Use a 5-bit input where bits 2 and 3 (0-based) are set -> 0b01100
+		// Use a 5-bit input where bits 0,2,4 (0-based) are set -> 0b10101
 		{name: "NewButton basic", input: "(0, 2, 4)", outputState: 0b10101},
 	}
 	for _, tc := range testCases {
@@ -77,17 +77,92 @@ func TestNewButton(t *testing.T) {
 	}
 }
 
+func TestNewVoltageState(t *testing.T) {
+	var testCases = []struct {
+		name   string
+		input  string
+		output VoltageState
+	}{
+		{name: "Simple", input: "{1,2,3}", output: VoltageState{1, 2, 3}},
+		{name: "Larger Values", input: "{217,234,214,41,203,41,236,197,221}", output: VoltageState{217, 234, 214, 41, 203, 41, 236, 197, 221}},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			fmt.Println(tc.name)
+			st := NewVoltageState(tc.input)
+			if len(st) != len(tc.output) {
+				t.Fatalf("NewVoltageState(%s) length = %d; want %d", tc.input, len(st), len(tc.output))
+			}
+			for i := range st {
+				if st[i] != tc.output[i] {
+					t.Fatalf("NewVoltageState(%s)[%d] = %d; want %d", tc.input, i, st[i], tc.output[i])
+				}
+			}
+		})
+	}
+}
+
+func TestVoltageStateString(t *testing.T) {
+	var testCases = []struct {
+		name   string
+		input  VoltageState
+		output string
+	}{
+		{name: "All Zero", input: VoltageState{0, 0, 0, 0, 0}, output: "{0,0,0,0,0}"},
+		{name: "Mixed", input: VoltageState{1, 2, 3}, output: "{1,2,3}"},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			fmt.Println(tc.name)
+			s := tc.input.String()
+			if s != tc.output {
+				t.Fatalf("VoltageState.String produced %s; want %s", s, tc.output)
+			}
+		})
+	}
+}
+
+func TestVoltageStatePressButton(t *testing.T) {
+	var testCases = []struct {
+		name        string
+		initialVolt string
+		button      string
+		output      string
+	}{
+		{name: "Part 2 Base One Button", initialVolt: "{0,0,0,0,0}", button: "(0)", output: "{1,0,0,0,0}"},
+		{name: "Multiple Indices", initialVolt: "{0,0,0,0,0}", button: "(0,2,4)", output: "{1,0,1,0,1}"},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			fmt.Println(tc.name)
+
+			// Parse initial voltage and button
+			v := NewVoltageState(tc.initialVolt)
+			b := NewButton(tc.button)
+
+			// Apply button once
+			v = v.PressButton(b)
+
+			s := v.String()
+			if s != tc.output {
+				t.Fatalf("VoltageState.PressButton produced %s; want %s", s, tc.output)
+			}
+		})
+	}
+}
+
 func TestNewEquation(t *testing.T) {
 	var testCases = []struct {
 		name         string
 		inputEq      string
 		initialState string
 		output       string
+		voltage      string // optional: only checked when non-empty
 	}{
-		{name: "Base - One Button", inputEq: "[.....] (0) {1,2,3}", initialState: "[.....]", output: "[#....]"},
-		{name: "Mixed State - One Button", inputEq: "[..##.] (0) {}", initialState: "[..##.]", output: "[#.##.]"},
-		{name: "Invert", inputEq: "[..##.] (0,1,2,3,4) {}", initialState: "[..##.]", output: "[##..#]"},
-		{name: "Partial Change", inputEq: "[..##.] (0) {}", initialState: "[..##.]", output: "[#.##.]"},
+		{name: "Base - One Button", inputEq: "[.....] (0) {1,2,3,4,5}", initialState: "[.....]", output: "[#....]", voltage: "{1,2,3,4,5}"},
+		{name: "Mixed State - One Button", inputEq: "[..##.] (0) {1,2,3,4,5}", initialState: "[..##.]", output: "[#.##.]", voltage: "{1,2,3,4,5}"},
+		{name: "Invert", inputEq: "[..##.] (0,1,2,3,4) {1,2,3,4,5}", initialState: "[..##.]", output: "[##..#]", voltage: "{1,2,3,4,5}"},
+		{name: "Partial Change", inputEq: "[..##.] (0) {1,2,3,4,5}", initialState: "[..##.]", output: "[#.##.]", voltage: "{1,2,3,4,5}"},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -100,7 +175,15 @@ func TestNewEquation(t *testing.T) {
 				t.Fatalf("NewEquation(%s) produced target %s; want %s", tc.inputEq, s, tc.initialState)
 			}
 
-			// Press each button once and check the state
+			// If we have an expected voltage string, check VoltageTarget too
+			if tc.voltage != "" {
+				vs := e.TargetVoltage.String()
+				if vs != tc.voltage {
+					t.Fatalf("NewEquation(%s) produced voltage %s; want %s", tc.inputEq, vs, tc.voltage)
+				}
+			}
+
+			// Press each button once and check the state (Part 1 behavior)
 			for _, b := range e.Buttons {
 				e.Target = e.Target.PressButton(b)
 			}
