@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"maps"
 	"os"
 	"regexp"
 )
@@ -79,7 +80,7 @@ func Solve1(input chan *Graph) (string, error) {
 		}
 	}
 
-	total = graph.countPathsDfs("you", "out")
+	total = graph.countPathsDfs("you", "out", nil)
 
 	return fmt.Sprintf("%d", total), nil
 }
@@ -98,32 +99,58 @@ func Solve2(input chan *Graph) (string, error) {
 		}
 	}
 
-	total = graph.countPathsDfs("you", "out")
+	//Find every path from "svr" to "out"
+	// The paths must all also visit both "dac" and "fft" (in any order).
+	total = graph.countPathsDfs("svr", "out", []string{"dac", "fft"})
 
 	return fmt.Sprintf("%d", total), nil
 }
 
 type Graph map[string][]string
 
-func (g *Graph) countPathsDfs(current, target string) int {
-	return dfsHelper(*g, current, target, make(map[string]bool))
+func (g *Graph) countPathsDfs(current, target string, mustVisit []string) int {
+	visited := make(map[string]bool)
+
+	// Track required nodes using a map[string]bool
+	req := make(map[string]bool)
+	for _, m := range mustVisit {
+		req[m] = false
+	}
+
+	return dfsHelper(*g, current, target, visited, req)
 }
 
-func dfsHelper(g Graph, current, target string, visited map[string]bool) int {
+func dfsHelper(g Graph, current, target string, visited map[string]bool, req map[string]bool) int {
+	// Mark if current is a required node
+	if _, ok := req[current]; ok {
+		req[current] = true
+	}
+
+	// If we reached the target, all required nodes must be visited
 	if current == target {
+		for _, seen := range req {
+			if !seen {
+				return 0
+			}
+		}
 		return 1
 	}
 
 	visited[current] = true
-	defer func() { visited[current] = false }() // backtrack
+	defer func() { visited[current] = false }()
 
 	total := 0
 	for _, next := range g[current] {
 		if visited[next] {
-			// avoid cycles
 			continue
 		}
-		total += dfsHelper(g, next, target, visited)
+
+		// Clone req map for the child call (important!)
+		nextReq := make(map[string]bool, len(req))
+		maps.Copy(nextReq, req)
+
+		total += dfsHelper(g, next, target, visited, nextReq)
 	}
+
 	return total
 }
